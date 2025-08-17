@@ -46,8 +46,26 @@ func (r *LinkPGRepository) FindByShortCode(ctx context.Context, shortCode string
 }
 
 // ListByUser implements usecase.LinkRepository.
-func (l *LinkPGRepository) ListByUser(ctx context.Context, userID int64) ([]*domain.Link, error) {
-	panic("unimplemented")
+func (r *LinkPGRepository) ListByUser(ctx context.Context, userID int64) ([]*domain.Link, error) {
+	linkModels := []*model.LinkBunModel{}
+
+	err := r.db.NewSelect().
+		Model(&linkModels).
+		Where("user_id = ?", userID).
+		Where("deleted_at is NULL").
+		Order("created_at DESC").
+		Scan(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var links []*domain.Link
+	for _, lm := range linkModels {
+		links = append(links, lm.ToDomain())
+	}
+
+	return links, nil
 }
 
 // SoftDeleteByShortCode implements usecase.LinkRepository.

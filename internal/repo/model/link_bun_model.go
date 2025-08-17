@@ -4,6 +4,7 @@ import (
 	"time"
 	"url-shortener/internal/domain"
 
+	"github.com/jinzhu/copier"
 	"github.com/uptrace/bun"
 )
 
@@ -23,30 +24,16 @@ func (m *LinkBunModel) ToDomain() *domain.Link {
 	if m == nil {
 		return nil
 	}
-	return &domain.Link{
-		ID:            m.ID,
-		UserID:        m.UserID,
-		ShortCode:     m.ShortCode,
-		LongURL:       m.LongURL,
-		ClickCount:    m.ClickCount,
-		LastClickedAt: m.LastClickedAt,
-		DeletedAt:     m.DeletedAt,
-		CreatedAt:     m.CreatedAt,
-	}
+	var d domain.Link
+	copier.Copy(&d, m)
+	return &d
 }
 
 func ToLinkBunModel(link *domain.Link) *LinkBunModel {
 	if link == nil {
 		return nil
 	}
-	return &LinkBunModel{
-		ID:            link.ID,
-		UserID:        link.UserID,
-		ShortCode:     link.ShortCode,
-		LongURL:       link.LongURL,
-		ClickCount:    link.ClickCount,
-		LastClickedAt: link.LastClickedAt,
-		DeletedAt:     link.DeletedAt,
-		CreatedAt:     link.CreatedAt,
-	}
+	var m LinkBunModel
+	copier.Copy(&m, link)
+	return &m
 }

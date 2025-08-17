@@ -9,7 +9,6 @@ import (
 	"url-shortener/internal/repo/model"
 	"url-shortener/internal/seeder"
 	"url-shortener/internal/transport/http/handler"
-	"url-shortener/internal/transport/middleware"
 	"url-shortener/internal/usecase"
 
 	"github.com/gin-gonic/gin"
@@ -48,13 +47,8 @@ func NewBunDB() *bun.DB {
 
 func RunServer(lc fx.Lifecycle, h *handler.LinkHttpHandler, userRepo usecase.UserRepository, db *bun.DB) {
 	r := gin.Default()
-	//auth group
-	api := r.Group("/api")
-	api.Use(middleware.ApiKeyAuth(userRepo))
-	h.RegisterAuthRoutes(api)
-	//public group
-	public := r.Group("/")
-	h.RegisterPublicRoutes(public)
+
+	h.RegisterRoutes(r, userRepo)
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
