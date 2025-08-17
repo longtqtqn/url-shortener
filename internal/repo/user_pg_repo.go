@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"url-shortener/internal/domain"
+	"url-shortener/internal/repo/model"
 	"url-shortener/internal/usecase"
 
 	"github.com/uptrace/bun"
@@ -18,16 +19,17 @@ func NewUserPGRepository(db *bun.DB) usecase.UserRepository {
 
 // Create implements usecase.UserRepository.
 func (r *UserPGRepository) Create(ctx context.Context, user *domain.User) error {
-	_, err := r.db.NewInsert().Model(user).Exec(ctx)
+	userModel := model.ToUserBunModel(user)
+	_, err := r.db.NewInsert().Model(userModel).Exec(ctx)
 	return err
 }
 
-// GetByAPIKey implements usecase.UserRepository.
-func (r *UserPGRepository) GetByAPIKey(ctx context.Context, apiKey string) (*domain.User, error) {
-	user := new(domain.User)
-	err := r.db.NewSelect().Model(user).Where("apikey = ?", apiKey).Scan(ctx)
+// FindByAPIKey implements usecase.UserRepository.
+func (r *UserPGRepository) FindByAPIKey(ctx context.Context, apiKey string) (*domain.User, error) {
+	userModel := new(model.UserBunModel)
+	err := r.db.NewSelect().Model(userModel).Where("apikey = ?", apiKey).Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return user, nil
+	return userModel.ToDomain(), nil
 }

@@ -14,7 +14,7 @@ func ApiKeyAuth(userRepo usecase.UserRepository) gin.HandlerFunc {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "API key required"})
 			return
 		}
-		user, err := userRepo.GetByAPIKey(ctx.Request.Context(), apiKey)
+		user, err := userRepo.FindByAPIKey(ctx.Request.Context(), apiKey)
 		if err != nil {
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid API key"})
 		}

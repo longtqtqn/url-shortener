@@ -9,6 +9,7 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: passhihihi
       POSTGRES_DB: urlshortener
+      TZ: Asia/Ho_Chi_Minh
     ports:
       - "5432:5432"
     volumes:

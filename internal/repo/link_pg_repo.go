@@ -5,7 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"time"
-	domain "url-shortener/internal/domain"
+	"url-shortener/internal/domain"
+	"url-shortener/internal/repo/model"
 	"url-shortener/internal/usecase"
 
 	"github.com/uptrace/bun"
@@ -24,14 +25,15 @@ func NewLinkPGRepository(db *bun.DB) usecase.LinkRepository {
 
 // Create implements usecase.LinkRepository.
 func (r *LinkPGRepository) Create(ctx context.Context, link *domain.Link) error {
-	_, err := r.db.NewInsert().Model(link).ExcludeColumn("id").Exec(ctx)
+	linkModel := model.ToLinkBunModel(link)
+	_, err := r.db.NewInsert().Model(linkModel).ExcludeColumn("id").Exec(ctx)
 	return err
 }
 
-// GetByShortCode implements usecase.LinkRepository.
-func (r *LinkPGRepository) GetByShortCode(ctx context.Context, shortCode string) (*domain.Link, error) {
-	link := new(domain.Link)
-	err := r.db.NewSelect().Model(link).Where("short_code = ?", shortCode).Scan(ctx)
+// FindByShortCode implements usecase.LinkRepository.
+func (r *LinkPGRepository) FindByShortCode(ctx context.Context, shortCode string) (*domain.Link, error) {
+	linkModel := new(model.LinkBunModel)
+	err := r.db.NewSelect().Model(linkModel).Where("short_code = ?", shortCode).Scan(ctx)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -40,7 +42,7 @@ func (r *LinkPGRepository) GetByShortCode(ctx context.Context, shortCode string)
 	if err != nil {
 		return nil, err
 	}
-	return link, nil
+	return linkModel.ToDomain(), nil
 }
 
 // ListByUser implements usecase.LinkRepository.
@@ -51,7 +53,7 @@ func (l *LinkPGRepository) ListByUser(ctx context.Context, userID int64) ([]*dom
 // SoftDeleteByShortCode implements usecase.LinkRepository.
 func (r *LinkPGRepository) SoftDeleteByShortCode(ctx context.Context, userID int64, shortCode string, deletedAt time.Time) error {
 	_, err := r.db.NewDelete().
-		Model((*domain.Link)(nil)).
+		Model((*model.LinkBunModel)(nil)).
 		Where("user_id = ?", userID).
 		Where("short_code = ?", shortCode).
 		Exec(ctx)
@@ -59,9 +61,9 @@ func (r *LinkPGRepository) SoftDeleteByShortCode(ctx context.Context, userID int
 }
 
 // TrackClick implements usecase.LinkRepository.
-func (r *LinkPGRepository) TrackClick(ctx context.Context, shortCode string, at time.Time) error {
+func (r *LinkPGRepository) TrackClick(ctx context.Context, shortCode string) error {
 	_, err := r.db.NewUpdate().
-		Model((*domain.Link)(nil)).
+		Model((*model.LinkBunModel)(nil)).
 		Set("click_count = click_count + 1").
 		Set("last_clicked_at = NOW()").
 		Where("short_code = ?", shortCode).
@@ -70,4 +72,14 @@ func (r *LinkPGRepository) TrackClick(ctx context.Context, shortCode string, at 
 	return err
 }
 
-// func (* Link)
+func (r *LinkPGRepository) FindLinkCountByUserIDAndLongURL(ctx context.Context, userID int64, longURL string) (int, error) {
+	count, err := r.db.NewSelect().
+		Model((*model.LinkBunModel)(nil)).
+		Where("user_id = ?", userID).
+		Where("long_url = ?", longURL).
+		Count(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}

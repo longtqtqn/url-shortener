@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
-	"url-shortener/internal/domain"
 	"url-shortener/internal/repo"
+	"url-shortener/internal/repo/model"
 	"url-shortener/internal/seeder"
 	"url-shortener/internal/transport/http/handler"
 	"url-shortener/internal/transport/middleware"
@@ -48,19 +48,31 @@ func NewBunDB() *bun.DB {
 
 func RunServer(lc fx.Lifecycle, h *handler.LinkHttpHandler, userRepo usecase.UserRepository, db *bun.DB) {
 	r := gin.Default()
-
+	//auth group
 	api := r.Group("/api")
 	api.Use(middleware.ApiKeyAuth(userRepo))
-	h.RegisterRoutes(api)
+	h.RegisterAuthRoutes(api)
+	//public group
+	public := r.Group("/")
+	h.RegisterPublicRoutes(public)
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			//Create tables
-			if _, err := db.NewCreateTable().Model((*domain.User)(nil)).IfNotExists().Exec(ctx); err != nil {
+			if _, err := db.NewCreateTable().Model((*model.UserBunModel)(nil)).IfNotExists().Exec(ctx); err != nil {
 				log.Fatalf("Failed to create users table: %v", err)
 			}
-			if _, err := db.NewCreateTable().Model((*domain.Link)(nil)).IfNotExists().Exec(ctx); err != nil {
+			if _, err := db.NewCreateTable().Model((*model.LinkBunModel)(nil)).IfNotExists().Exec(ctx); err != nil {
 				log.Fatalf("Failed to create links table: %v", err)
+			}
+
+			//Composite
+			_, err := db.ExecContext(ctx, `
+				CREATE UNIQUE INDEX IF NOT EXISTS idx_user_longurl_unique
+				ON links (user_id, long_url)
+			`)
+			if err != nil {
+				log.Fatalf("Failed to create composite unique index: %v", err)
 			}
 
 			//Seed

@@ -2,18 +2,15 @@ package domain
 
 import (
 	"time"
-
-	"github.com/uptrace/bun"
 )
 
 type Link struct {
-	bun.BaseModel `bun:"table:links"`
-	ID            int64      `bun:"id,pk,autoincrement"`
-	UserID        int64      `bun:"user_id,notnull,"`
-	ShortCode     string     `bun:"short_code,notnull"`
-	LongURL       string     `bun:"long_url,notnull"`
-	ClickCount    int64      `bun:"click_count,notnull,default:0"`
-	LastClickedAt *time.Time `bun:"last_clicked_at,nullzero"`
-	DeletedAt     *time.Time `bun:"deleted_at,nullzero,soft_delete"`
-	CreatedAt     time.Time  `bun:"created_at,notnull,default:current_timestamp"`
+	ID            int64
+	UserID        int64
+	ShortCode     string
+	LongURL       string
+	ClickCount    int64
+	LastClickedAt *time.Time
+	DeletedAt     *time.Time
+	CreatedAt     time.Time
 }
