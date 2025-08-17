@@ -33,3 +33,11 @@ func (r *UserPGRepository) FindByAPIKey(ctx context.Context, apiKey string) (*do
 	}
 	return userModel.ToDomain(), nil
 }
+
+func (r *UserPGRepository) SoftDeleteByID(ctx context.Context, userID int64) error {
+	_, err := r.db.NewDelete().
+		Model((*model.UserBunModel)(nil)).
+		Where("id = ?", userID).
+		Exec(ctx)
+	return err
+}

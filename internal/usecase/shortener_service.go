@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"math/rand"
-	"time"
 	domain "url-shortener/internal/domain"
 )
 
@@ -23,7 +22,7 @@ type LinkRepository interface {
 	Create(ctx context.Context, link *domain.Link) error
 	FindByShortCode(ctx context.Context, shortCode string) (*domain.Link, error)
 	ListByUser(ctx context.Context, userID int64) ([]*domain.Link, error)
-	SoftDeleteByShortCode(ctx context.Context, userID int64, shortCode string, deletedAt time.Time) error
+	SoftDeleteByShortCode(ctx context.Context, userID int64, shortCode string) error
 	TrackClick(ctx context.Context, shortCode string) error
 
 	FindLinkCountByUserIDAndLongURL(ctx context.Context, userID int64, longURL string) (int, error)
@@ -107,7 +106,7 @@ func (s *ShortenerService) ListLinksByUser(ctx context.Context, userID int64) ([
 }
 
 func (s *ShortenerService) SoftDeleteByCode(ctx context.Context, userID int64, shortCode string) error {
-	return s.linkRepo.SoftDeleteByShortCode(ctx, userID, shortCode, time.Now())
+	return s.linkRepo.SoftDeleteByShortCode(ctx, userID, shortCode)
 }
 
 func generateRandomCode(n int) string {

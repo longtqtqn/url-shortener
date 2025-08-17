@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"time"
 	"url-shortener/internal/domain"
 	"url-shortener/internal/repo/model"
 	"url-shortener/internal/usecase"
@@ -69,7 +68,7 @@ func (r *LinkPGRepository) ListByUser(ctx context.Context, userID int64) ([]*dom
 }
 
 // SoftDeleteByShortCode implements usecase.LinkRepository.
-func (r *LinkPGRepository) SoftDeleteByShortCode(ctx context.Context, userID int64, shortCode string, deletedAt time.Time) error {
+func (r *LinkPGRepository) SoftDeleteByShortCode(ctx context.Context, userID int64, shortCode string) error {
 	_, err := r.db.NewDelete().
 		Model((*model.LinkBunModel)(nil)).
 		Where("user_id = ?", userID).
