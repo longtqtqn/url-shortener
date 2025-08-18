@@ -16,6 +16,7 @@ type UserBunModel struct {
 	DeletedAt     *time.Time `bun:"deleted_at,nullzero,soft_delete"`
 	CreatedAt     time.Time  `bun:"created_at,notnull,default:current_timestamp"`
 	UpdatedAt     *time.Time `bun:"updated_at,nullzero"`
+	Plan          string     `bun:"plan,notnull,default:'free'"`
 }
 
 func (m *UserBunModel) ToDomain() *domain.User {

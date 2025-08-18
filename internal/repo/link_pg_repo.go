@@ -100,3 +100,15 @@ func (r *LinkPGRepository) FindLinkCountByUserIDAndLongURL(ctx context.Context, 
 	}
 	return count, nil
 }
+
+func (r *LinkPGRepository) FindLinkCountByUserID(ctx context.Context, userID int64) (int, error) {
+	count, err := r.db.NewSelect().
+		Model((*model.LinkBunModel)(nil)).
+		Where("user_id = ?", userID).
+		Where("deleted_at IS NULL").
+		Count(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}

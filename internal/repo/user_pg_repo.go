@@ -34,6 +34,16 @@ func (r *UserPGRepository) FindByAPIKey(ctx context.Context, apiKey string) (*do
 	return userModel.ToDomain(), nil
 }
 
+// FindByID implements usecase.UserRepository.
+func (r *UserPGRepository) FindByID(ctx context.Context, id int64) (*domain.User, error) {
+	userModel := new(model.UserBunModel)
+	err := r.db.NewSelect().Model(userModel).Where("id = ?", id).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return userModel.ToDomain(), nil
+}
+
 func (r *UserPGRepository) SoftDeleteByID(ctx context.Context, userID int64) error {
 	_, err := r.db.NewDelete().
 		Model((*model.UserBunModel)(nil)).

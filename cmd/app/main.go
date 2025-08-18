@@ -5,19 +5,51 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"url-shortener/internal/repo"
 	"url-shortener/internal/seeder"
 	"url-shortener/internal/transport/http/handler"
 	"url-shortener/internal/usecase"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
 	"go.uber.org/fx"
 )
 
+func requireEnv(keys ...string) {
+	missing := []string{}
+	for _, k := range keys {
+		if _, ok := os.LookupEnv(k); !ok || os.Getenv(k) == "" {
+			missing = append(missing, k)
+		}
+	}
+	if len(missing) > 0 {
+		log.Fatalf("Missing required environment variables: %v", missing)
+	}
+}
+
+func loadEnv() {
+	_ = godotenv.Load()
+	env := os.Getenv("ENV")
+	if env == "" {
+		env = "development"
+	}
+
+	_ = godotenv.Overload(".env." + env)
+	if mode := os.Getenv("GIN_MODE"); mode != "" {
+		gin.SetMode(mode)
+	}
+	// Always require essential envs for both development and production
+	requireEnv("DATABASE_URL", "PORT", "GIN_MODE", "FREE_PLAN_MAX_LINKS")
+}
+
 func main() {
+	loadEnv()
+
 	fx.New(
 		fx.Provide(
 			NewBunDB,
@@ -31,7 +63,10 @@ func main() {
 }
 
 func NewBunDB() *bun.DB {
-	dsn := "postgres://user:passhihihi@localhost:5432/urlshortener?sslmode=disable" // via pgpool
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://user:passhihihi@localhost:5432/urlshortener?sslmode=disable" // via pgpool
+	}
 
 	connector := pgdriver.NewConnector(pgdriver.WithDSN(dsn))
 	sqlDB := sql.OpenDB(connector)
@@ -69,8 +104,14 @@ func RunServer(lc fx.Lifecycle, h *handler.LinkHttpHandler, userRepo usecase.Use
 
 			//Start server
 			go func() {
-				log.Println("Server starting on :8080")
-				if err := r.Run(":8080"); err != nil && err != http.ErrServerClosed {
+				addr := os.Getenv("PORT")
+				if addr == "" {
+					addr = ":8080"
+				} else if !strings.HasPrefix(addr, ":") {
+					addr = ":" + addr
+				}
+				log.Println("Server starting on", addr)
+				if err := r.Run(addr); err != nil && err != http.ErrServerClosed {
 					log.Fatalf("Run fail: %v", err)
 				}
 			}()

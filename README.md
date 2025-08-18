@@ -69,6 +69,41 @@ go.mod, go.sum                 # Go dependencies
 - Update the Postgres DSN in `cmd/app/main.go` if needed.
 - Run migrations before starting the app.
 
+## Configuration (Environment Variables)
+- `SEED_ENABLED` (default: false): enable seeding on startup.
+- `SEED_MODE` (default: `enforce`): seeding behavior.
+  - `enforce`: upsert and restore soft-deleted users to match seeder data.
+  - `exist-only`: insert only if missing; never update existing rows.
+- `FREE_PLAN_MAX_LINKS` (default: 10): maximum number of links for `free` plan.
+
+Examples (zsh/bash):
+```sh
+export SEED_ENABLED=true
+export SEED_MODE=enforce
+export FREE_PLAN_MAX_LINKS=10
+```
+
+Environment loading:
+- The app auto-loads `.env` and overlays `.env.{ENV}` (default `ENV=development`).
+- Create and edit `.env.development` and/or `.env.production` as needed.
+- An example file is provided: `.env.example`. Keep it in the repo and use it as a template.
+
+From the example file:
+```sh
+# Create environment files from the example
+cp .env.example .env.development
+cp .env.example .env.production   # then edit for production-safe values
+```
+
+Run per environment:
+```sh
+# Development
+ENV=development go run ./cmd/app/main.go
+
+# Production (local prod-like run)
+ENV=production go run ./cmd/app/main.go
+```
+
 ## Database Migrations
 - All schema changes are managed via SQL files in the `migrations/` folder.
 - **Do not rely on the app to create or update tables automatically.**
@@ -78,7 +113,7 @@ go.mod, go.sum                 # Go dependencies
   migrate -path ./migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" up
   migrate -path ./migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" down
   ```
-- Create a new timestamp-based migration (will generate files like `YYYYMMDDHHMMSS_add_feature.up.sql`):
+- Create a new timestamp-based migration (generates `YYYYMMDDHHMMSS_name.up.sql`):
   ```sh
   migrate create -ext sql -dir ./migrations add_feature
   ```
