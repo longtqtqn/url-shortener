@@ -1,20 +1,61 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15
-    container_name: postgres_db
+  postgresql-primary:
+    image: bitnami/postgresql:15
+    container_name: urlshortener-postgres-primary
     restart: unless-stopped
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: passhihihi
-      POSTGRES_DB: urlshortener
-      TZ: Asia/Ho_Chi_Minh
+      - POSTGRESQL_POSTGRES_PASSWORD=postgres
+      - POSTGRESQL_USERNAME=user
+      - POSTGRESQL_PASSWORD=passhihihi
+      - POSTGRESQL_DATABASE=urlshortener
+      - POSTGRESQL_REPLICATION_MODE=master
+      - POSTGRESQL_REPLICATION_USER=repl_user
+      - POSTGRESQL_REPLICATION_PASSWORD=repl_password
+      - TZ=Asia/Ho_Chi_Minh
     ports:
-      - "5432:5432"
+      - "5433:5432" # expose primary on 5433 for admin tools
     volumes:
-      - urlshortener_pgdata:/var/lib/postgresql/data
-        
+      - urlshortener_pgdata_primary:/bitnami/postgresql
+
+  postgresql-replica:
+    image: bitnami/postgresql:15
+    container_name: urlshortener-postgres-replica
+    restart: unless-stopped
+    depends_on:
+      - postgresql-primary
+    environment:
+      - POSTGRESQL_PASSWORD=passhihihi
+      - POSTGRESQL_REPLICATION_MODE=slave
+      - POSTGRESQL_REPLICATION_USER=repl_user
+      - POSTGRESQL_REPLICATION_PASSWORD=repl_password
+      - POSTGRESQL_MASTER_HOST=postgresql-primary
+      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+      - TZ=Asia/Ho_Chi_Minh
+    volumes:
+      - urlshortener_pgdata_replica:/bitnami/postgresql
+
+  pgpool:
+    image: bitnami/pgpool:4
+    container_name: urlshortener-pgpool
+    restart: unless-stopped
+    depends_on:
+      - postgresql-primary
+      - postgresql-replica
+    environment:
+      - PGPOOL_BACKEND_NODES=0:postgresql-primary:5432,1:postgresql-replica:5432
+      - PGPOOL_SR_CHECK_USER=repl_user
+      - PGPOOL_SR_CHECK_PASSWORD=repl_password
+      - PGPOOL_ENABLE_LDAP=no
+      - PGPOOL_POSTGRES_USERNAME=user
+      - PGPOOL_POSTGRES_PASSWORD=passhihihi
+      - PGPOOL_ADMIN_USERNAME=admin
+      - PGPOOL_ADMIN_PASSWORD=admin
+      - TZ=Asia/Ho_Chi_Minh
+    ports:
+      - "5432:5432" # app connects to this
+
   pgadmin:
     image: dpage/pgadmin4:7
     container_name: urlshortener-pgadmin
@@ -25,7 +66,8 @@ services:
     ports:
       - "8081:80"
     depends_on:
-      - postgres
+      - postgresql-primary
 
 volumes:
-  urlshortener_pgdata:
+  urlshortener_pgdata_primary:
+  urlshortener_pgdata_replica:

@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"url-shortener/internal/repo"
-	"url-shortener/internal/repo/model"
 	"url-shortener/internal/seeder"
 	"url-shortener/internal/transport/http/handler"
 	"url-shortener/internal/usecase"
@@ -32,7 +31,7 @@ func main() {
 }
 
 func NewBunDB() *bun.DB {
-	dsn := "postgres://user:passhihihi@localhost:5432/urlshortener?sslmode=disable"
+	dsn := "postgres://user:passhihihi@localhost:5432/urlshortener?sslmode=disable" // via pgpool
 
 	connector := pgdriver.NewConnector(pgdriver.WithDSN(dsn))
 	sqlDB := sql.OpenDB(connector)
@@ -48,26 +47,20 @@ func NewBunDB() *bun.DB {
 func RunServer(lc fx.Lifecycle, h *handler.LinkHttpHandler, userRepo usecase.UserRepository, db *bun.DB) {
 	r := gin.Default()
 
+	r.HEAD("/healthz", func(c *gin.Context) {
+		if err := db.RunInTx(c, nil, func(ctx context.Context, tx bun.Tx) error { return nil }); err != nil {
+			c.Status(http.StatusServiceUnavailable)
+			return
+		}
+		c.Status(http.StatusOK)
+	})
+
 	h.RegisterRoutes(r, userRepo)
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			//Create tables
-			if _, err := db.NewCreateTable().Model((*model.UserBunModel)(nil)).IfNotExists().Exec(ctx); err != nil {
-				log.Fatalf("Failed to create users table: %v", err)
-			}
-			if _, err := db.NewCreateTable().Model((*model.LinkBunModel)(nil)).IfNotExists().Exec(ctx); err != nil {
-				log.Fatalf("Failed to create links table: %v", err)
-			}
-
-			//Composite
-			_, err := db.ExecContext(ctx, `
-				CREATE UNIQUE INDEX IF NOT EXISTS idx_user_longurl_unique
-				ON links (user_id, long_url)
-			`)
-			if err != nil {
-				log.Fatalf("Failed to create composite unique index: %v", err)
-			}
+			// Tables and indexes are now managed by migrations.
+			// Please run migrations before starting the app.
 
 			//Seed
 			if err := seeder.SeedApiKey(ctx, db); err != nil {

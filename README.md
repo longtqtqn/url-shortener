@@ -1,23 +1,28 @@
 # URL Shortener
 
+[GitHub Repository](https://github.com/longtqtqn/url-shortener.git)
+
 A simple, modular, and production-ready URL shortener service built with Go, Gin, Bun ORM, and PostgreSQL.
 
 ## Features
 - Shorten long URLs to unique short codes
 - User authentication via API key
 - Track click counts and last clicked time
-- Soft delete for links
+- Soft delete for links and users
+- Timestamps for creation and updates
 - RESTful API with Gin
 - PostgreSQL for persistent storage
 - Dockerized for easy setup
 - Admin-friendly with pgAdmin
+- Schema managed by SQL migrations
 
 ## Architecture
 - **Gin**: HTTP server and routing
-- **Bun ORM**: Database access and migrations
+- **Bun ORM**: Database access
 - **PostgreSQL**: Data storage
 - **Fx**: Dependency injection and lifecycle management
 - **Copier**: Struct mapping between DB and domain models
+- **Migrations**: Schema managed via SQL files in the `migrations/` folder
 
 ## Project Structure
 ```
@@ -28,6 +33,7 @@ internal/transport/http/       # HTTP handlers
 internal/transport/middleware/ # Gin middleware (API key auth)
 internal/usecase/              # Business logic
 internal/seeder/               # DB seeding utilities
+migrations/                    # SQL migration files (schema management)
 docker-compose.yml             # Docker setup for Postgres and pgAdmin
 go.mod, go.sum                 # Go dependencies
 ```
@@ -37,26 +43,46 @@ go.mod, go.sum                 # Go dependencies
 ### Prerequisites
 - Go 1.25+
 - Docker & Docker Compose
+- [golang-migrate](https://github.com/golang-migrate/migrate) (for DB migrations)
 
 ### Quick Start (Docker)
 1. Clone the repo:
    ```sh
-   git clone <your-repo-url>
+   git clone https://github.com/longtqtqn/url-shortener.git
    cd url-shortener
    ```
 2. Start Postgres and pgAdmin:
    ```sh
    docker-compose up -d
    ```
-3. Run the app:
+3. Run database migrations:
+   ```sh
+   migrate -path ./migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" up
+   ```
+4. Run the app:
    ```sh
    go run ./cmd/app/main.go
    ```
-4. Access pgAdmin at [http://localhost:8081](http://localhost:8081) (user: admin@admin.com, pass: admin)
+5. Access pgAdmin at [http://localhost:8081](http://localhost:8081) (user: admin@admin.com, pass: admin)
 
 ### Local Development
 - Update the Postgres DSN in `cmd/app/main.go` if needed.
-- Run the app as above.
+- Run migrations before starting the app.
+
+## Database Migrations
+- All schema changes are managed via SQL files in the `migrations/` folder.
+- **Do not rely on the app to create or update tables automatically.**
+- Use [golang-migrate](https://github.com/golang-migrate/migrate) or a similar tool to apply migrations.
+- Example commands:
+  ```sh
+  migrate -path ./migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" up
+  migrate -path ./migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" down
+  ```
+- Create a new timestamp-based migration (will generate files like `YYYYMMDDHHMMSS_add_feature.up.sql`):
+  ```sh
+  migrate create -ext sql -dir ./migrations add_feature
+  ```
+  Then edit the generated `.up.sql` and `.down.sql` files.
 
 ## API Usage
 
@@ -89,6 +115,13 @@ Response: [
 ]
 ```
 
+#### Soft Delete Link
+```
+DELETE /api/links/:shortCode
+Headers: X-API-KEY: <your-api-key>
+Response: 204 No Content
+```
+
 #### Redirect Short Link
 ```
 GET /:shortCode
@@ -97,7 +130,8 @@ Response: 302 Redirect to original URL
 
 ## Development Notes
 - Uses Uber Fx for dependency injection and lifecycle.
-- Bun ORM auto-creates tables and indexes on startup.
+- Bun ORM models use soft delete and timestamps.
+- All schema changes are managed by SQL migrations.
 - API key authentication middleware is in `internal/transport/middleware/apikey.go`.
 - Struct mapping uses [jinzhu/copier](https://github.com/jinzhu/copier).
 - See `internal/transport/http/handler/link_http_handler.go` for main API logic.
