@@ -5,34 +5,80 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"url-shortener/internal/repo"
-	"url-shortener/internal/repo/model"
 	"url-shortener/internal/seeder"
 	"url-shortener/internal/transport/http/handler"
+	"url-shortener/internal/transport/http/router"
 	"url-shortener/internal/usecase"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 	"github.com/uptrace/bun/driver/pgdriver"
 	"go.uber.org/fx"
 )
 
+func requireEnv(keys ...string) {
+	missing := []string{}
+	for _, k := range keys {
+		if _, ok := os.LookupEnv(k); !ok || os.Getenv(k) == "" {
+			missing = append(missing, k)
+		}
+	}
+	if len(missing) > 0 {
+		log.Fatalf("Missing required environment variables: %v", missing)
+	}
+}
+
+func loadEnv() {
+	_ = godotenv.Load()
+	env := os.Getenv("ENV")
+	if env == "" {
+		env = "development"
+	}
+	_ = godotenv.Overload(".env." + env)
+	if mode := os.Getenv("GIN_MODE"); mode != "" {
+		gin.SetMode(mode)
+	}
+	// Enforce required envs in production
+	if env == "production" {
+		requireEnv("DATABASE_URL", "PORT", "GIN_MODE", "FREE_PLAN_MAX_LINKS")
+	} else {
+		// In non-production, warn if key settings are missing
+		warnKeys := []string{"FREE_PLAN_MAX_LINKS"}
+		for _, k := range warnKeys {
+			if os.Getenv(k) == "" {
+				log.Printf("Warning: %s is not set; defaults may be used", k)
+			}
+		}
+	}
+}
+
 func main() {
+	loadEnv()
+
 	fx.New(
 		fx.Provide(
 			NewBunDB,
 			repo.NewLinkPGRepository,
 			repo.NewUserPGRepository,
 			usecase.NewShortenerService,
+			usecase.NewAdminService,
 			handler.NewLinkHttpHandler,
+			handler.NewAdminHttpHandler,
 		),
 		fx.Invoke(RunServer),
 	).Run()
 }
 
 func NewBunDB() *bun.DB {
-	dsn := "postgres://user:passhihihi@localhost:5432/urlshortener?sslmode=disable"
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://user:passhihihi@localhost:5432/urlshortener?sslmode=disable" // via pgpool
+	}
 
 	connector := pgdriver.NewConnector(pgdriver.WithDSN(dsn))
 	sqlDB := sql.OpenDB(connector)
@@ -45,29 +91,15 @@ func NewBunDB() *bun.DB {
 	return db
 }
 
-func RunServer(lc fx.Lifecycle, h *handler.LinkHttpHandler, userRepo usecase.UserRepository, db *bun.DB) {
+func RunServer(lc fx.Lifecycle, linkH *handler.LinkHttpHandler, adminH *handler.AdminHttpHandler, userRepo usecase.UserRepository, db *bun.DB) {
 	r := gin.Default()
 
-	h.RegisterRoutes(r, userRepo)
+	router.Register(r, db, userRepo, linkH, adminH)
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			//Create tables
-			if _, err := db.NewCreateTable().Model((*model.UserBunModel)(nil)).IfNotExists().Exec(ctx); err != nil {
-				log.Fatalf("Failed to create users table: %v", err)
-			}
-			if _, err := db.NewCreateTable().Model((*model.LinkBunModel)(nil)).IfNotExists().Exec(ctx); err != nil {
-				log.Fatalf("Failed to create links table: %v", err)
-			}
-
-			//Composite
-			_, err := db.ExecContext(ctx, `
-				CREATE UNIQUE INDEX IF NOT EXISTS idx_user_longurl_unique
-				ON links (user_id, long_url)
-			`)
-			if err != nil {
-				log.Fatalf("Failed to create composite unique index: %v", err)
-			}
+			// Tables and indexes are now managed by migrations.
+			// Please run migrations before starting the app.
 
 			//Seed
 			if err := seeder.SeedApiKey(ctx, db); err != nil {
@@ -76,8 +108,14 @@ func RunServer(lc fx.Lifecycle, h *handler.LinkHttpHandler, userRepo usecase.Use
 
 			//Start server
 			go func() {
-				log.Println("Server starting on :8080")
-				if err := r.Run(":8080"); err != nil && err != http.ErrServerClosed {
+				addr := os.Getenv("PORT")
+				if addr == "" {
+					addr = ":8080"
+				} else if !strings.HasPrefix(addr, ":") {
+					addr = ":" + addr
+				}
+				log.Println("Server starting on", addr)
+				if err := r.Run(addr); err != nil && err != http.ErrServerClosed {
 					log.Fatalf("Run fail: %v", err)
 				}
 			}()

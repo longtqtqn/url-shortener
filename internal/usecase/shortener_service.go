@@ -2,9 +2,10 @@ package usecase
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"math/rand"
+	"os"
+	"strconv"
 	"time"
 	domain "url-shortener/internal/domain"
 )
@@ -17,21 +18,42 @@ var (
 	ErrLinkAlreadyExists  = errors.New("link already exists for this user")
 	ErrMaxRetriesExceeded = errors.New("could not generate a unique short code after multiple retries")
 	ErrLinkNotFound       = errors.New("short code not found")
+	ErrLinkLimitExceeded  = errors.New("free plan link limit reached")
 )
+
+const (
+	FreePlan    = "free"
+	PremiumPlan = "premium"
+)
+
+// FreePlanMaxLinks is configurable via env FREE_PLAN_MAX_LINKS (default 10)
+var FreePlanMaxLinks = func() int {
+	if v := os.Getenv("FREE_PLAN_MAX_LINKS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 10
+}()
 
 type LinkRepository interface {
 	Create(ctx context.Context, link *domain.Link) error
 	FindByShortCode(ctx context.Context, shortCode string) (*domain.Link, error)
 	ListByUser(ctx context.Context, userID int64) ([]*domain.Link, error)
-	SoftDeleteByShortCode(ctx context.Context, userID int64, shortCode string, deletedAt time.Time) error
+	SoftDeleteByShortCode(ctx context.Context, userID int64, shortCode string) error
 	TrackClick(ctx context.Context, shortCode string) error
 
 	FindLinkCountByUserIDAndLongURL(ctx context.Context, userID int64, longURL string) (int, error)
+	FindLinkCountByUserID(ctx context.Context, userID int64) (int, error)
 }
 
 type UserRepository interface {
 	FindByAPIKey(ctx context.Context, apiKey string) (*domain.User, error)
 	Create(ctx context.Context, user *domain.User) error
+	FindByID(ctx context.Context, id int64) (*domain.User, error)
+	SoftDeleteByID(ctx context.Context, userID int64) error
+	UpdatePlanAndExpiry(ctx context.Context, userID int64, plan string, expiresAt *time.Time) error
+	CreateAPIKey(ctx context.Context, userID int64, key string) error
 }
 
 type ShortenerService struct {
@@ -50,9 +72,22 @@ func NewShortenerService(linkRepo LinkRepository, userRepo UserRepository) *Shor
 }
 
 func (s *ShortenerService) CreateShortLink(ctx context.Context, userID int64, longURL string) (*domain.Link, error) {
+	// Enforce plan limits
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user != nil && user.Role != "admin" && user.Plan == FreePlan {
+		cnt, err := s.linkRepo.FindLinkCountByUserID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if cnt >= FreePlanMaxLinks {
+			return nil, ErrLinkLimitExceeded
+		}
+	}
 
 	count, err := s.linkRepo.FindLinkCountByUserIDAndLongURL(ctx, userID, longURL)
-
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +99,7 @@ func (s *ShortenerService) CreateShortLink(ctx context.Context, userID int64, lo
 		tmpCode := generateRandomCode(codeLength)
 
 		link, err := s.linkRepo.FindByShortCode(ctx, tmpCode)
-		if err != nil && errors.Is(err, sql.ErrNoRows) {
+		if err != nil {
 			return nil, err
 		}
 
@@ -107,7 +142,7 @@ func (s *ShortenerService) ListLinksByUser(ctx context.Context, userID int64) ([
 }
 
 func (s *ShortenerService) SoftDeleteByCode(ctx context.Context, userID int64, shortCode string) error {
-	return s.linkRepo.SoftDeleteByShortCode(ctx, userID, shortCode, time.Now())
+	return s.linkRepo.SoftDeleteByShortCode(ctx, userID, shortCode)
 }
 
 func generateRandomCode(n int) string {

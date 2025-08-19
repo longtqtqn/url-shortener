@@ -20,13 +20,40 @@ func NewLinkHttpHandler(service *usecase.ShortenerService) *LinkHttpHandler {
 	return &LinkHttpHandler{service: service}
 }
 
+type route struct {
+	method      string
+	relativeURL string
+	handler     gin.HandlerFunc
+}
+
 func (h *LinkHttpHandler) RegisterAuthRoutes(rg *gin.RouterGroup) {
-	rg.POST("/links", h.CreateShortLink)
-	rg.GET("/links", h.GetLinksByUser)
+	authRoutes := []route{
+		{"POST", "/links", h.CreateShortLink},
+		{"GET", "/links", h.GetLinksByUser},
+		{"DELETE", "/links/:shortCode", h.SoftDeleteLink},
+	}
+	for _, r := range authRoutes {
+		switch r.method {
+		case "POST":
+			rg.POST(r.relativeURL, r.handler)
+		case "GET":
+			rg.GET(r.relativeURL, r.handler)
+		case "DELETE":
+			rg.DELETE(r.relativeURL, r.handler)
+		}
+	}
 }
 
 func (h *LinkHttpHandler) RegisterPublicRoutes(rg *gin.RouterGroup) {
-	rg.GET("/:shortCode", h.ResolveShortCode)
+	publicRoutes := []route{
+		{"GET", "/:shortCode", h.ResolveShortCode},
+	}
+	for _, r := range publicRoutes {
+		switch r.method {
+		case "GET":
+			rg.GET(r.relativeURL, r.handler)
+		}
+	}
 }
 
 func (h *LinkHttpHandler) RegisterRoutes(r *gin.Engine, userRepo usecase.UserRepository) {
@@ -135,4 +162,19 @@ func (h *LinkHttpHandler) GetLinksByUser(ctx *gin.Context) {
 		})
 	}
 	ctx.JSON(http.StatusOK, resp)
+}
+
+func (h *LinkHttpHandler) SoftDeleteLink(ctx *gin.Context) {
+	currentUser := ctx.MustGet("currentUser").(*domain.User)
+	shortCode := ctx.Param("shortCode")
+	if shortCode == "" {
+		respondError(ctx, http.StatusBadRequest, errors.New("short code is required"))
+		return
+	}
+	err := h.service.SoftDeleteByCode(ctx, currentUser.ID, shortCode)
+	if err != nil {
+		respondError(ctx, http.StatusInternalServerError, err)
+		return
+	}
+	ctx.Status(http.StatusNoContent)
 }
