@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"time"
 	domain "url-shortener/internal/domain"
 )
 
@@ -50,6 +51,9 @@ type UserRepository interface {
 	FindByAPIKey(ctx context.Context, apiKey string) (*domain.User, error)
 	Create(ctx context.Context, user *domain.User) error
 	FindByID(ctx context.Context, id int64) (*domain.User, error)
+	SoftDeleteByID(ctx context.Context, userID int64) error
+	UpdatePlanAndExpiry(ctx context.Context, userID int64, plan string, expiresAt *time.Time) error
+	CreateAPIKey(ctx context.Context, userID int64, key string) error
 }
 
 type ShortenerService struct {
@@ -73,7 +77,7 @@ func (s *ShortenerService) CreateShortLink(ctx context.Context, userID int64, lo
 	if err != nil {
 		return nil, err
 	}
-	if user != nil && user.Plan == FreePlan {
+	if user != nil && user.Role != "admin" && user.Plan == FreePlan {
 		cnt, err := s.linkRepo.FindLinkCountByUserID(ctx, userID)
 		if err != nil {
 			return nil, err

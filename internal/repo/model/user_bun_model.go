@@ -12,11 +12,12 @@ type UserBunModel struct {
 	bun.BaseModel `bun:"table:users"`
 	ID            int64      `bun:"id,pk,autoincrement"`
 	Email         string     `bun:"email,unique,notnull"`
-	APIKEY        string     `bun:"apikey,unique,notnull"`
 	DeletedAt     *time.Time `bun:"deleted_at,nullzero,soft_delete"`
 	CreatedAt     time.Time  `bun:"created_at,notnull,default:current_timestamp"`
 	UpdatedAt     *time.Time `bun:"updated_at,nullzero"`
 	Plan          string     `bun:"plan,notnull,default:'free'"`
+	Role          string     `bun:"role,notnull,default:'user'"`
+	PlanExpiresAt *time.Time `bun:"plan_expires_at,nullzero"`
 }
 
 func (m *UserBunModel) ToDomain() *domain.User {

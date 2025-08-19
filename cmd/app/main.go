@@ -10,6 +10,7 @@ import (
 	"url-shortener/internal/repo"
 	"url-shortener/internal/seeder"
 	"url-shortener/internal/transport/http/handler"
+	"url-shortener/internal/transport/http/router"
 	"url-shortener/internal/usecase"
 
 	"github.com/gin-gonic/gin"
@@ -38,13 +39,22 @@ func loadEnv() {
 	if env == "" {
 		env = "development"
 	}
-
 	_ = godotenv.Overload(".env." + env)
 	if mode := os.Getenv("GIN_MODE"); mode != "" {
 		gin.SetMode(mode)
 	}
-	// Always require essential envs for both development and production
-	requireEnv("DATABASE_URL", "PORT", "GIN_MODE", "FREE_PLAN_MAX_LINKS")
+	// Enforce required envs in production
+	if env == "production" {
+		requireEnv("DATABASE_URL", "PORT", "GIN_MODE", "FREE_PLAN_MAX_LINKS")
+	} else {
+		// In non-production, warn if key settings are missing
+		warnKeys := []string{"FREE_PLAN_MAX_LINKS"}
+		for _, k := range warnKeys {
+			if os.Getenv(k) == "" {
+				log.Printf("Warning: %s is not set; defaults may be used", k)
+			}
+		}
+	}
 }
 
 func main() {
@@ -56,7 +66,9 @@ func main() {
 			repo.NewLinkPGRepository,
 			repo.NewUserPGRepository,
 			usecase.NewShortenerService,
+			usecase.NewAdminService,
 			handler.NewLinkHttpHandler,
+			handler.NewAdminHttpHandler,
 		),
 		fx.Invoke(RunServer),
 	).Run()
@@ -79,18 +91,10 @@ func NewBunDB() *bun.DB {
 	return db
 }
 
-func RunServer(lc fx.Lifecycle, h *handler.LinkHttpHandler, userRepo usecase.UserRepository, db *bun.DB) {
+func RunServer(lc fx.Lifecycle, linkH *handler.LinkHttpHandler, adminH *handler.AdminHttpHandler, userRepo usecase.UserRepository, db *bun.DB) {
 	r := gin.Default()
 
-	r.HEAD("/healthz", func(c *gin.Context) {
-		if err := db.RunInTx(c, nil, func(ctx context.Context, tx bun.Tx) error { return nil }); err != nil {
-			c.Status(http.StatusServiceUnavailable)
-			return
-		}
-		c.Status(http.StatusOK)
-	})
-
-	h.RegisterRoutes(r, userRepo)
+	router.Register(r, db, userRepo, linkH, adminH)
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {

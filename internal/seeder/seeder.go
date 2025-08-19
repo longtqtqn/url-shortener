@@ -12,10 +12,17 @@ import (
 	"github.com/uptrace/bun"
 )
 
-func parseSeedUsers() []*domain.User {
+type seedUser struct {
+	Email  string `json:"email"`
+	APIKey string `json:"apikey"`
+	Plan   string `json:"plan"`
+	Role   string `json:"role"`
+}
+
+func parseSeedUsers() []seedUser {
 	// Priority: SEED_USERS_JSON > defaults
 	if raw := os.Getenv("SEED_USERS_JSON"); strings.TrimSpace(raw) != "" {
-		var users []*domain.User
+		var users []seedUser
 		if err := json.Unmarshal([]byte(raw), &users); err == nil && len(users) > 0 {
 			return users
 		} else if err != nil {
@@ -23,9 +30,9 @@ func parseSeedUsers() []*domain.User {
 		}
 	}
 	// defaults
-	return []*domain.User{
-		{APIKEY: "key1test", Email: "test@example.com", Plan: "free"},
-		{APIKEY: "key2test", Email: "test2@example.com", Plan: "premium"},
+	return []seedUser{
+		{Email: "test@example.com", APIKey: "key1test", Plan: "free", Role: "user"},
+		{Email: "test2@example.com", APIKey: "key2test", Plan: "premium", Role: "admin"},
 	}
 }
 
@@ -41,38 +48,65 @@ func SeedApiKey(ctx context.Context, db *bun.DB) error {
 
 	log.Println("START Seeding API Keys... (mode:", mode, ")")
 
-	usersToSeed := parseSeedUsers()
+	seedUsers := parseSeedUsers()
 
-	for _, user := range usersToSeed {
+	for _, su := range seedUsers {
+		// Upsert user row first
+		user := &domain.User{Email: su.Email, Plan: su.Plan, Role: su.Role}
 		userModel := model.ToUserBunModel(user)
 
 		if mode == "exist-only" {
-			// Insert if not exists; do not modify existing rows
 			_, err := db.NewInsert().
 				Model(userModel).
 				On("CONFLICT (email) DO NOTHING").
 				Exec(ctx)
 			if err != nil {
-				log.Printf("Error inserting user %s: %v", user.Email, err)
+				log.Printf("Error inserting user %s: %v", su.Email, err)
 				continue
 			}
-			log.Printf("Inserted (or existed) user %s", user.Email)
+		} else {
+			_, err := db.NewInsert().
+				Model(userModel).
+				On("CONFLICT (email) DO UPDATE").
+				Set("plan = EXCLUDED.plan").
+				Set("role = EXCLUDED.role").
+				Set("deleted_at = NULL").
+				Exec(ctx)
+			if err != nil {
+				log.Printf("Error upserting user %s: %v", su.Email, err)
+				continue
+			}
+		}
+
+		// Ensure we have the user id
+		var persistedUser model.UserBunModel
+		if err := db.NewSelect().Model(&persistedUser).Where("email = ?", su.Email).Scan(ctx); err != nil {
+			log.Printf("Failed to load user id for %s: %v", su.Email, err)
 			continue
 		}
 
-		// enforce: upsert and restore if soft-deleted
+		// Upsert API key row mapping to user
+		apiKey := &model.ApiKeyBunModel{UserID: persistedUser.ID, Key: su.APIKey}
+		if mode == "exist-only" {
+			_, err := db.NewInsert().Model(apiKey).On("CONFLICT (key) DO NOTHING").Exec(ctx)
+			if err != nil {
+				log.Printf("Error inserting apikey for %s: %v", su.Email, err)
+				continue
+			}
+			log.Printf("Inserted apikey for %s (or existed)", su.Email)
+			continue
+		}
 		_, err := db.NewInsert().
-			Model(userModel).
-			On("CONFLICT (email) DO UPDATE").
-			Set("apikey = EXCLUDED.apikey").
-			Set("plan = EXCLUDED.plan").
+			Model(apiKey).
+			On("CONFLICT (key) DO UPDATE").
+			Set("user_id = EXCLUDED.user_id").
 			Set("deleted_at = NULL").
 			Exec(ctx)
 		if err != nil {
-			log.Printf("Error upserting user %s: %v", user.Email, err)
+			log.Printf("Error upserting apikey for %s: %v", su.Email, err)
 			continue
 		}
-		log.Printf("Upserted user %s successfully!", user.Email)
+		log.Printf("Upserted apikey for %s successfully!", su.Email)
 	}
 
 	log.Println("Seeding process finished.")

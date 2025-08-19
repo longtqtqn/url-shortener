@@ -1,0 +1,6 @@
+-- +migrate Down
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS apikey TEXT UNIQUE NULL;
+
+ALTER TABLE users
+  DROP COLUMN IF EXISTS role;
