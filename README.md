@@ -6,10 +6,12 @@ A simple, modular, and production-ready URL shortener service built with Go, Gin
 
 ## Features
 - Shorten long URLs to unique short codes
-- User authentication via API key
+- User authentication via API key (one user can have many keys)
 - Track click counts and last clicked time
 - Soft delete for links and users
 - Timestamps for creation and updates
+- Roles: `admin` (no link limit) and `user` (subject to free-plan limit)
+- Plans: `free` (limited) and `premium`
 - RESTful API with Gin
 - PostgreSQL for persistent storage
 - Dockerized for easy setup
@@ -30,6 +32,7 @@ cmd/app/main.go                # Application entrypoint
 internal/domain/               # Domain models
 internal/repo/                 # Database models and repositories
 internal/transport/http/       # HTTP handlers
+internal/transport/http/router # Central router wiring (all Gin routes)
 internal/transport/middleware/ # Gin middleware (API key auth)
 internal/usecase/              # Business logic
 internal/seeder/               # DB seeding utilities
@@ -61,13 +64,50 @@ go.mod, go.sum                 # Go dependencies
    ```
 4. Run the app:
    ```sh
-   go run ./cmd/app/main.go
+   ENV=development go run ./cmd/app/main.go
    ```
 5. Access pgAdmin at [http://localhost:8081](http://localhost:8081) (user: admin@admin.com, pass: admin)
 
 ### Local Development
 - Update the Postgres DSN in `cmd/app/main.go` if needed.
 - Run migrations before starting the app.
+
+## Configuration (Environment Variables)
+- `SEED_ENABLED` (default: false): enable seeding on startup.
+- `SEED_MODE` (default: `enforce`): seeding behavior.
+  - `enforce`: upsert and restore soft-deleted users to match seeder data.
+  - `exist-only`: insert only if missing; never update existing rows.
+- `FREE_PLAN_MAX_LINKS` (default: 10): maximum number of links for `free` plan.
+- `DATABASE_URL`: Postgres DSN (required in production).
+- `PORT`: HTTP port (required in production).
+- `GIN_MODE`: `debug` or `release` (required in production).
+- `SEED_USERS_JSON`: optional JSON array to seed users (email, apikey, plan, role).
+
+Example `SEED_USERS_JSON` (single line):
+```env
+SEED_USERS_JSON='[{"email":"test@example.com","apikey":"key1test","plan":"free","role":"user"},{"email":"test2@example.com","apikey":"key2test","plan":"premium","role":"admin"}]'
+```
+
+Environment loading:
+- The app auto-loads `.env` and overlays `.env.{ENV}` (default `ENV=development`).
+- Create and edit `.env.development` and/or `.env.production` as needed.
+- An example file is provided: `.env.example`. Keep it in the repo and use it as a template.
+
+From the example file:
+```sh
+# Create environment files from the example
+cp .env.example .env.development
+cp .env.example .env.production   # then edit for production-safe values
+```
+
+Run per environment:
+```sh
+# Development
+ENV=development go run ./cmd/app/main.go
+
+# Production (local prod-like run)
+ENV=production go run ./cmd/app/main.go
+```
 
 ## Database Migrations
 - All schema changes are managed via SQL files in the `migrations/` folder.
@@ -78,7 +118,7 @@ go.mod, go.sum                 # Go dependencies
   migrate -path ./migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" up
   migrate -path ./migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" down
   ```
-- Create a new timestamp-based migration (will generate files like `YYYYMMDDHHMMSS_add_feature.up.sql`):
+- Create a new timestamp-based migration (generates `YYYYMMDDHHMMSS_name.up.sql`):
   ```sh
   migrate create -ext sql -dir ./migrations add_feature
   ```
@@ -88,7 +128,7 @@ go.mod, go.sum                 # Go dependencies
 
 ### Authentication
 - All `/api` endpoints require an `X-API-KEY` header.
-- Seeded users and API keys are created on startup (see `internal/seeder/seeder.go`).
+- API keys are stored in the `apikeys` table (one user can have many keys).
 
 ### Endpoints
 
@@ -128,11 +168,54 @@ GET /:shortCode
 Response: 302 Redirect to original URL
 ```
 
+### Admin API (admin role required)
+All admin endpoints require a valid admin `X-API-KEY`.
+
+Create user
+```
+POST /admin/users
+Headers: X-API-KEY: <admin-api-key>
+Body: {
+  "email": "user@example.com",
+  "plan": "free|premium",
+  "role": "user|admin",
+  "plan_expires_at": "2025-12-31T23:59:59Z" // optional
+}
+Response: 201 Created (json user)
+```
+
+Create API key for a user
+```
+POST /admin/users/:id/apikeys
+Headers: X-API-KEY: <admin-api-key>
+Body: { "key": "generated-or-provided-key" }
+Response: 201 Created
+```
+
+Soft delete user
+```
+DELETE /admin/users/:id
+Headers: X-API-KEY: <admin-api-key>
+Response: 204 No Content
+```
+
+Update user plan and expiry
+```
+PUT /admin/users/:id/plan
+Headers: X-API-KEY: <admin-api-key>
+Body: {
+  "plan": "free|premium",
+  "plan_expires_at": "2025-12-31T23:59:59Z" // optional (null to clear)
+}
+Response: 204 No Content
+```
+
 ## Development Notes
 - Uses Uber Fx for dependency injection and lifecycle.
 - Bun ORM models use soft delete and timestamps.
 - All schema changes are managed by SQL migrations.
 - API key authentication middleware is in `internal/transport/middleware/apikey.go`.
+- Routes are registered centrally in `internal/transport/http/router/router.go`.
 - Struct mapping uses [jinzhu/copier](https://github.com/jinzhu/copier).
 - See `internal/transport/http/handler/link_http_handler.go` for main API logic.
 
