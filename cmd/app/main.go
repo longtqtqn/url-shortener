@@ -13,6 +13,7 @@ import (
 	"url-shortener/internal/transport/http/router"
 	"url-shortener/internal/usecase"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/uptrace/bun"
@@ -93,7 +94,12 @@ func NewBunDB() *bun.DB {
 
 func RunServer(lc fx.Lifecycle, linkH *handler.LinkHttpHandler, adminH *handler.AdminHttpHandler, userRepo usecase.UserRepository, db *bun.DB) {
 	r := gin.Default()
-
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "X-API-KEY"},
+		AllowCredentials: true,
+	}))
 	router.Register(r, db, userRepo, linkH, adminH)
 
 	lc.Append(fx.Hook{
