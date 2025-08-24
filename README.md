@@ -5,18 +5,16 @@
 A simple, modular, and production-ready URL shortener service built with Go, Gin, Bun ORM, and PostgreSQL.
 
 ## Features
-- Shorten long URLs to unique short codes
-- User authentication via API key (one user can have many keys)
-- Track click counts and last clicked time
-- Soft delete for links and users
-- Timestamps for creation and updates
-- Roles: `admin` (no link limit) and `user` (subject to free-plan limit)
-- Plans: `free` (limited) and `premium`
-- RESTful API with Gin
-- PostgreSQL for persistent storage
-- Dockerized for easy setup
-- Admin-friendly with pgAdmin
-- Schema managed by SQL migrations
+- **Simple API Key Authentication**: Every request requires an API key
+- **Easy Onboarding**: Users without keys can create one with just their email
+- **Flexible Short Codes**: Auto-generated or custom user-defined short codes
+- **Link Management**: Create, view, and delete short URLs
+- **Click Tracking**: Monitor click counts and last clicked times
+- **Fair Usage**: All users have the same configurable link limits
+- **RESTful API**: Clean, simple endpoints with Gin
+- **PostgreSQL Storage**: Reliable data persistence
+- **Docker Ready**: Easy setup with Docker Compose
+- **Migration Based**: Schema managed via SQL migrations
 
 ## Architecture
 - **Gin**: HTTP server and routing
@@ -26,19 +24,43 @@ A simple, modular, and production-ready URL shortener service built with Go, Gin
 - **Copier**: Struct mapping between DB and domain models
 - **Migrations**: Schema managed via SQL files in the `migrations/` folder
 
+## API Overview
+
+The service provides a simple, API key-based authentication system:
+
+- **Public Endpoints**: Create API key, resolve short URLs
+- **Protected Endpoints**: All link management operations require API key
+- **Simple Onboarding**: Users create API keys with just their email
+- **Flexible Short Codes**: Auto-generated or custom user-defined codes
+
+### Key Endpoints
+- `POST /create-api-key` - Create new API key (no auth required)
+- `POST /api/links` - Create short URL (auth required)
+- `GET /api/links` - List user's short URLs (auth required)
+- `DELETE /api/links/:code` - Delete short URL (auth required)
+- `GET /:code` - Resolve short URL (public)
+
+
+
 ## Project Structure
 ```
-cmd/app/main.go                # Application entrypoint
-internal/domain/               # Domain models
-internal/repo/                 # Database models and repositories
-internal/transport/http/       # HTTP handlers
-internal/transport/http/router # Central router wiring (all Gin routes)
-internal/transport/middleware/ # Gin middleware (API key auth)
-internal/usecase/              # Business logic
-internal/seeder/               # DB seeding utilities
-migrations/                    # SQL migration files (schema management)
-docker-compose.yml             # Docker setup for Postgres and pgAdmin
-go.mod, go.sum                 # Go dependencies
+├── backend/                   # Go backend service
+│   ├── cmd/app/main.go       # Application entrypoint
+│   ├── internal/
+│   │   ├── domain/           # Domain models + repository interfaces
+│   │   ├── repo/             # Database models and repositories
+│   │   ├── usecase/          # Business logic
+│   │   ├── transport/        # HTTP handlers, router, middleware
+│   │   │   ├── http/
+│   │   │   │   ├── handler/  # Link and User handlers
+│   │   │   │   └── router/   # Route registration
+│   │   │   └── middleware/   # API key authentication
+│   │   └── seeder/           # Database seeding utilities
+│   ├── migrations/           # SQL migration files
+│   └── go.mod, go.sum       # Go dependencies
+├── frontend/                  # Frontend application (if any)
+├── docker-compose.yml         # Docker setup for Postgres and pgAdmin
+└── README.md                 # This file
 ```
 
 ## Getting Started
@@ -54,22 +76,38 @@ go.mod, go.sum                 # Go dependencies
    git clone https://github.com/longtqtqn/url-shortener.git
    cd url-shortener
    ```
-2. Start Postgres and pgAdmin:
+
+2. Start PostgreSQL services:
    ```sh
    docker-compose up -d
    ```
-3. Run database migrations:
+   This starts:
+   - **Primary**: PostgreSQL master on port 5433
+   - **Replica**: PostgreSQL slave for read scaling
+   - **pgpool**: Connection pooler on port 5432 (app connects here)
+   - **pgAdmin**: Database management on port 8081
+
+3. Wait for database to be ready, then run migrations:
    ```sh
-   migrate -path ./migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" up
+   migrate -path ./backend/migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" up
    ```
+
 4. Run the app:
    ```sh
+   cd backend
    ENV=development go run ./cmd/app/main.go
    ```
-5. Access pgAdmin at [http://localhost:8081](http://localhost:8081) (user: admin@admin.com, pass: admin)
+
+#### **Database Architecture:**
+- **Primary (Port 5433)**: Write operations, migrations, admin tasks
+- **Replica (Port 5434)**: Read operations for scaling
+- **pgpool (Port 5432)**: Smart connection routing (app connects here)
+- **pgAdmin (Port 8081)**: Database management interface
 
 ### Local Development
-- Update the Postgres DSN in `cmd/app/main.go` if needed.
+- **App Connection**: Your Go app connects to pgpool on port 5432 (which routes to primary/replica)
+- **Direct Database Access**: Use port 5433 for direct primary database access (migrations, admin)
+- **pgAdmin**: Access database management at [http://localhost:8081](http://localhost:8081) (admin@admin.com / admin)
 - Run migrations before starting the app.
 
 ## Configuration (Environment Variables)
@@ -77,16 +115,18 @@ go.mod, go.sum                 # Go dependencies
 - `SEED_MODE` (default: `enforce`): seeding behavior.
   - `enforce`: upsert and restore soft-deleted users to match seeder data.
   - `exist-only`: insert only if missing; never update existing rows.
-- `FREE_PLAN_MAX_LINKS` (default: 10): maximum number of links for `free` plan.
+- `FREE_PLAN_MAX_LINKS` (default: 10): maximum number of links per user.
 - `DATABASE_URL`: Postgres DSN (required in production).
 - `PORT`: HTTP port (required in production).
 - `GIN_MODE`: `debug` or `release` (required in production).
-- `SEED_USERS_JSON`: optional JSON array to seed users (email, apikey, plan, role).
+- `SEED_USERS_JSON`: optional JSON array to seed users (email and apikey only).
 
 Example `SEED_USERS_JSON` (single line):
 ```env
-SEED_USERS_JSON='[{"email":"test@example.com","apikey":"key1test","plan":"free","role":"user"},{"email":"test2@example.com","apikey":"key2test","plan":"premium","role":"admin"}]'
+SEED_USERS_JSON='[{"email":"test@example.com","apikey":"testkey12345678901234567890123456"},{"email":"demo@example.com","apikey":"demokey1234567890123456789012345"}]'
 ```
+
+**Note**: API keys should be 32 characters long (hexadecimal format). The seeder will warn you if keys are not the correct length.
 
 Environment loading:
 - The app auto-loads `.env` and overlays `.env.{ENV}` (default `ENV=development`).
@@ -110,34 +150,70 @@ ENV=production go run ./cmd/app/main.go
 ```
 
 ## Database Migrations
-- All schema changes are managed via SQL files in the `migrations/` folder.
-- **Do not rely on the app to create or update tables automatically.**
-- Use [golang-migrate](https://github.com/golang-migrate/migrate) or a similar tool to apply migrations.
-- Example commands:
-  ```sh
-  migrate -path ./migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" up
-  migrate -path ./migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" down
-  ```
-- Create a new timestamp-based migration (generates `YYYYMMDDHHMMSS_name.up.sql`):
-  ```sh
-  migrate create -ext sql -dir ./migrations add_feature
-  ```
-  Then edit the generated `.up.sql` and `.down.sql` files.
+- **Clean Schema**: Single migration file with complete database setup
+- **golang-migrate**: Professional migration management tool
+- **Easy Reset**: Use `migrate down` to rollback, `migrate up` to apply
+
+### Quick Database Setup
+```bash
+# 1. Create database (if it doesn't exist)
+createdb -h localhost -p 5433 -U user urlshortener
+
+# 2. Apply migrations
+migrate -path ./backend/migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" up
+
+# 3. To reset database (rollback all migrations)
+migrate -path ./backend/migrations -database "postgres://user:passhihihi@localhost:5433/urlshortener?sslmode=disable" down
+```
+
+### Migration Files
+- **`000001_init_schema.up.sql`**: Creates all tables and indexes
+- **`000001_init_schema.down.sql`**: Removes all tables (clean rollback)
+
+### Schema Overview
+- **users**: Simple user accounts (email only)
+- **apikeys**: API key authentication  
+- **links**: Shortened URLs with click tracking
+- **Indexes**: Optimized for common queries
 
 ## API Usage
 
 ### Authentication
 - All `/api` endpoints require an `X-API-KEY` header.
-- API keys are stored in the `apikeys` table (one user can have many keys).
+- API keys are 32-character hexadecimal strings.
+- Users can create API keys with just their email via `/create-api-key`.
 
 ### Endpoints
+#### Create User (No Auth Required)
+
+
+
+
+
+#### Create API Key (No Auth Required)
+```
+POST /create-api-key
+Body: { "email": "user@example.com" }
+Response: { 
+  "message": "API key created successfully",
+  "api_key": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+  "user_id": 123
+}
+```
 
 #### Create Short Link
 ```
 POST /api/links
 Headers: X-API-KEY: <your-api-key>
-Body: { "long_url": "https://example.com" }
-Response: { "shortened_url": "http://localhost:8080/abc123" }
+Body: { 
+  "long_url": "https://example.com",
+  "short_code": "custom"  // Optional - auto-generated if not provided
+}
+Response: { 
+  "shortened_url": "http://localhost:8080/custom",
+  "short_code": "custom",
+  "long_url": "https://example.com"
+}
 ```
 
 #### List User Links
@@ -155,7 +231,7 @@ Response: [
 ]
 ```
 
-#### Soft Delete Link
+#### Delete Link
 ```
 DELETE /api/links/:shortCode
 Headers: X-API-KEY: <your-api-key>
@@ -168,56 +244,35 @@ GET /:shortCode
 Response: 302 Redirect to original URL
 ```
 
-### Admin API (admin role required)
-All admin endpoints require a valid admin `X-API-KEY`.
+## Business Rules
 
-Create user
-```
-POST /admin/users
-Headers: X-API-KEY: <admin-api-key>
-Body: {
-  "email": "user@example.com",
-  "plan": "free|premium",
-  "role": "user|admin",
-  "plan_expires_at": "2025-12-31T23:59:59Z" // optional
-}
-Response: 201 Created (json user)
-```
+### User Management
+- **Simple**: Only email required to create account
+- **Auto-Creation**: Users created automatically when requesting API key
+- **No Plans/Roles**: All users are equal with same link limits
+- **One API Key**: Each user can have one API key
 
-Create API key for a user
-```
-POST /admin/users/:id/apikeys
-Headers: X-API-KEY: <admin-api-key>
-Body: { "key": "generated-or-provided-key" }
-Response: 201 Created
-```
+### Link Management
+- **Link Limits**: Configurable via `FREE_PLAN_MAX_LINKS` (default: 10)
+- **Short Codes**: 6-character auto-generated or custom user-defined
+- **Global Uniqueness**: Short codes must be unique across all users
+- **Conflict Handling**: Returns error if custom code already exists
 
-Soft delete user
-```
-DELETE /admin/users/:id
-Headers: X-API-KEY: <admin-api-key>
-Response: 204 No Content
-```
-
-Update user plan and expiry
-```
-PUT /admin/users/:id/plan
-Headers: X-API-KEY: <admin-api-key>
-Body: {
-  "plan": "free|premium",
-  "plan_expires_at": "2025-12-31T23:59:59Z" // optional (null to clear)
-}
-Response: 204 No Content
-```
+### Short Code Rules
+- **Auto-Generated**: Random 6-character string if not specified
+- **Custom Codes**: Users can specify their own short codes
+- **Validation**: Custom codes checked for global uniqueness
+- **Format**: Alphanumeric characters (0-9, a-z, A-Z)
 
 ## Development Notes
 - Uses Uber Fx for dependency injection and lifecycle.
 - Bun ORM models use soft delete and timestamps.
 - All schema changes are managed by SQL migrations.
-- API key authentication middleware is in `internal/transport/middleware/apikey.go`.
-- Routes are registered centrally in `internal/transport/http/router/router.go`.
+- API key authentication middleware is in `backend/internal/transport/middleware/apikey.go`.
+- Routes are registered centrally in `backend/internal/transport/http/router/router.go`.
 - Struct mapping uses [jinzhu/copier](https://github.com/jinzhu/copier).
-- See `internal/transport/http/handler/link_http_handler.go` for main API logic.
+- See `backend/internal/transport/http/handler/link_http_handler.go` for main API logic.
+- See `backend/internal/transport/http/handler/user_http_handler.go` for user management.
 
 ## License
 MIT
