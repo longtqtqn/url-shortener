@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 /* Custom styles */
 body {
@@ -75,27 +73,27 @@ code {
 
 /* Ensure modal is always centered and has proper z-index */
 .modal-container {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  z-index: 9999 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 1rem !important;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
 }
 
 /* Override any conflicting styles */
 body.modal-open {
-  overflow: hidden !important;
+  overflow: hidden;
 }
 
 /* Ensure modal content is properly positioned */
 .modal-content {
-  position: relative !important;
-  z-index: 10000 !important;
-  max-height: 90vh !important;
-  overflow-y: auto !important;
+  position: relative;
+  z-index: 10000;
+  max-height: 90vh;
+  overflow-y: auto;
 }

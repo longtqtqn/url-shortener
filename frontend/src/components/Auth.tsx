@@ -43,22 +43,26 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       
       // Store the JWT token
       apiService.storeToken(response.token);
-      if (response.api_key) {
+      
+      if (mode === 'login' && response.api_keys) {
+        // Login: Store the list of API keys
+        apiService.storeApiKeys(response.api_keys);
+        setSuccess(`Login successful! Found ${response.api_keys.length} API key(s).`);
+        onAuthSuccess(response.token, response.api_keys[0]?.key);
+      } else if (mode === 'register' && response.api_keys) {
+        // Register: Store the API keys array
+        apiService.storeApiKeys(response.api_keys);
+        setSuccess('Registration successful! API key created.');
+        onAuthSuccess(response.token, response.api_keys[0]?.key);
+      } else if (mode === 'register' && response.api_key) {
+        // Register: Handle single API key (backward compatibility)
         apiService.storeApiKey(response.api_key);
-      }
-      // Automatically create an API key for the user
-      try {
-        setSuccess(`${mode === 'login' ? 'Login' : 'Registration'} successful! Creating your API key...`);
-        
-        setSuccess(`${mode === 'login' ? 'Login' : 'Registration'} successful! You can now create URLs.`);
-        
-        // Notify parent component with both token and API key
+        setSuccess('Registration successful! API key created.');
         onAuthSuccess(response.token, response.api_key);
-      } catch (apiKeyError) {
-        console.error('Failed to create API key:', apiKeyError);
-        // Still proceed with authentication even if API key creation fails
+      } else {
+        // Fallback
         setSuccess(`${mode === 'login' ? 'Login' : 'Registration'} successful!`);
-        onAuthSuccess(response.token, response.api_key);
+        onAuthSuccess(response.token);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || `Failed to ${mode}`);
@@ -81,7 +85,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         {mode === 'login' ? 'Welcome Back' : 'Create Account'}
       </h2>
 
-      <form onSubmit={handleSubmit} className="flex flex-col items-center">
+      <form onSubmit={handleSubmit} className="flex flex-col items-center space-y-4">
         <div className="w-[70%] grid grid-cols-11">
           <label htmlFor="email" className="col-span-5 text-xs font-medium text-gray-700">
             Email Address

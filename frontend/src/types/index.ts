@@ -14,3 +14,8 @@ export type User = {
 };
 
 export type AuthMode = 'login' | 'register';
+
+export type ApiKey = {
+  key: string;
+  createdAt: string;
+};
