@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { apiService, type CreateLinkRequest } from '../services/api';
 
 interface CreateLinkProps {
@@ -13,6 +13,34 @@ const CreateLink: React.FC<CreateLinkProps> = ({ onLinkCreated, isAuthenticated 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [createdLink, setCreatedLink] = useState('');
+  const [apiKeys, setApiKeys] = useState<Array<{key: string, createdAt: string}>>([]);
+  const [selectedApiKey, setSelectedApiKey] = useState<string>('');
+
+  // Load API keys when component mounts or authentication changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      const storedApiKeys = apiService.getApiKeys();
+      setApiKeys(storedApiKeys || []);
+      
+      // Set current selected API key
+      const currentApiKey = apiService.getApiKey();
+      if (currentApiKey) {
+        setSelectedApiKey(currentApiKey);
+      } else if (storedApiKeys.length > 0) {
+        // If no API key is selected but we have keys, select the first one
+        setSelectedApiKey(storedApiKeys[0].key);
+        apiService.setSelectedApiKey(storedApiKeys[0].key);
+      }
+    } else {
+      setApiKeys([]);
+      setSelectedApiKey('');
+    }
+  }, [isAuthenticated]);
+
+  const handleApiKeyChange = (newApiKey: string) => {
+    setSelectedApiKey(newApiKey);
+    apiService.setSelectedApiKey(newApiKey);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,11 +81,12 @@ const CreateLink: React.FC<CreateLinkProps> = ({ onLinkCreated, isAuthenticated 
   };
 
   return (
-    <div className="flex justify-center pt-16 min-h-[calc(100vh-200px)]">
+    <div className="flex justify-center min-h-[calc(100vh-200px)]">
       <div className="w-[60%] bg-white rounded-lg shadow-md p-6">
         <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
           Create Short URL
         </h2>
+        
         
         <form onSubmit={handleSubmit} className="space-y-4">
         <div>
@@ -91,6 +120,49 @@ const CreateLink: React.FC<CreateLinkProps> = ({ onLinkCreated, isAuthenticated 
             Leave empty to auto-generate a 6-character code
           </p>
         </div>
+
+        {/* API Key Selector - only show if authenticated and has API keys */}
+        {isAuthenticated && apiKeys.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+            <label htmlFor="apiKeySelect" className="block text-sm font-medium text-blue-700 mb-2">
+              🔑 Select API Key ({apiKeys.length} available)
+            </label>
+            <select
+              id="apiKeySelect"
+              value={selectedApiKey}
+              onChange={(e) => handleApiKeyChange(e.target.value)}
+              className="w-full px-3 py-2 border border-blue-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              {apiKeys.map((apiKey, index) => {
+                const keyValue = apiKey?.key || 'Unknown';
+                const createdAt = apiKey?.createdAt || new Date().toISOString();
+                
+                if (typeof keyValue !== 'string' || keyValue.length < 8) {
+                  return (
+                    <option key={index} value={keyValue}>
+                      Invalid API Key #{index + 1}
+                    </option>
+                  );
+                }
+                
+                return (
+                  <option key={index} value={keyValue}>
+                    {keyValue.substring(0, 8)}***
+                    (Created: {new Date(createdAt).toLocaleDateString()})
+                  </option>
+                );
+              })}
+            </select>
+            <p className="mt-2 text-sm text-blue-600">
+              💡 Choose which API key to use for creating this link. 
+              {selectedApiKey && typeof selectedApiKey === 'string' && selectedApiKey.length >= 8 && (
+                <span className="font-medium">
+                  Currently using: {selectedApiKey.substring(0, 8)}***
+                </span>
+              )}
+            </p>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">

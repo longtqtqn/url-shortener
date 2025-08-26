@@ -179,6 +179,17 @@ func (s *ShortenerService) GetShortURLsByAPIKey(ctx context.Context, apiKeyID in
 	return links, nil
 }
 
+func (s *ShortenerService) GetAPIKeysByUserID(ctx context.Context, userID int64) ([]*domain.ApiKey, error) {
+	apiKeys, err := s.userRepo.GetAPIKeysByUserID(ctx, userID, 0, 0)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrUserHasNoAPIKey
+		}
+		return nil, err
+	}
+	return apiKeys, nil
+}
+
 // GetLinksWithoutAPIKey returns all links that were created without an API key (i.e., APIKeyID is NULL).
 func (s *ShortenerService) GetLinkWithoutAPIKey(ctx context.Context, shortCode string) ([]*domain.Link, error) {
 	links, err := s.linkRepo.GetLinkNoAPIKey(ctx, shortCode)
@@ -191,18 +202,7 @@ func (s *ShortenerService) GetLinkWithoutAPIKey(ctx context.Context, shortCode s
 	return links, nil
 }
 
-func (s *ShortenerService) GetFirstAPIKey(ctx context.Context, userID int64) (string, error) {
-	apiKeys, err := s.userRepo.GetAPIKeysByUserID(ctx, userID, 1, 0)
-	if err != nil {
-		return "", err
-	}
-	if len(apiKeys) == 0 {
-		return "", ErrUserHasNoAPIKey
-	}
-	return apiKeys[0].Key, nil
-}
-
-func (s *ShortenerService) DeleteShortLink(ctx context.Context, apiKey string, shortCode string) error {
+func (s *ShortenerService) DeleteLink(ctx context.Context, apiKey string, shortCode string) error {
 	apiKeyID, err := s.userRepo.GetAPIKeyIDByAPIKey(ctx, apiKey)
 	if err != nil {
 		return ErrUnauthorized

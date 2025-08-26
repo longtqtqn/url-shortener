@@ -164,7 +164,7 @@ func (h *LinkHttpHandler) SoftDeleteLink(ctx *gin.Context) {
 		respondError(ctx, http.StatusBadRequest, errors.New("short code is required"))
 		return
 	}
-	err := h.service.DeleteShortLink(ctx.Request.Context(), apiKey, shortCode)
+	err := h.service.DeleteLink(ctx.Request.Context(), apiKey, shortCode)
 	if err != nil {
 		if errors.Is(err, usecase.ErrUnauthorized) {
 			respondError(ctx, http.StatusUnauthorized, err)

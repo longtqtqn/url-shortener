@@ -55,7 +55,11 @@ export interface LoginRequest {
 export interface AuthResponse {
   message: string;
   token: string;
-  api_key?: string; // API key might be included in future
+  api_key?: string; // For register response
+  api_keys?: Array<{
+    key: string;
+    createdAt: string;
+  }>; // For login response
 }
 
 export interface CreateApiKeyResponse {
@@ -159,6 +163,24 @@ export const apiService = {
     localStorage.removeItem('apiKey');
   },
 
+  // API keys list management
+  storeApiKeys: (apiKeys: Array<{key: string, createdAt: string}>): void => {
+    localStorage.setItem('apiKeys', JSON.stringify(apiKeys));
+    // Set the first API key as the current one if none is set
+    if (!apiService.hasApiKey() && apiKeys.length > 0) {
+      apiService.storeApiKey(apiKeys[0].key);
+    }
+  },
+
+  getApiKeys: (): Array<{key: string, createdAt: string}> => {
+    const stored = localStorage.getItem('apiKeys');
+    return stored ? JSON.parse(stored) : [];
+  },
+
+  setSelectedApiKey: (apiKey: string): void => {
+    apiService.storeApiKey(apiKey);
+  },
+
   // Check if user is authenticated (either token or API key)
   isAuthenticated: (): boolean => {
     return apiService.hasToken() || apiService.hasApiKey();
@@ -168,6 +190,7 @@ export const apiService = {
   logout: (): void => {
     localStorage.removeItem('token');
     localStorage.removeItem('apiKey');
+    localStorage.removeItem('apiKeys');
   },
 
   // Debug utility to check current authentication headers

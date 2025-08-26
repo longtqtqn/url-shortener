@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 	httptypes "url-shortener/backend/internal/transport/http"
 	"url-shortener/backend/internal/usecase"
 
@@ -11,6 +12,11 @@ import (
 type UserHttpHandler struct {
 	shortenerService *usecase.ShortenerService
 	adminService     *usecase.AdminService
+}
+
+type APIKeyInfoResponse struct {
+	Key       string    `json:"key"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 func NewUserHttpHandler(shortenerService *usecase.ShortenerService, adminService *usecase.AdminService) *UserHttpHandler {
@@ -61,16 +67,23 @@ func (h *UserHttpHandler) Login(ctx *gin.Context) {
 		return
 	}
 
-	apiKey, err := h.shortenerService.GetFirstAPIKey(ctx.Request.Context(), userID)
+	apiKeys, err := h.shortenerService.GetAPIKeysByUserID(ctx.Request.Context(), userID)
+	apiKeyInfos := make([]APIKeyInfoResponse, len(apiKeys))
+	for i, apiKey := range apiKeys {
+		apiKeyInfos[i] = APIKeyInfoResponse{
+			Key:       apiKey.Key,
+			CreatedAt: apiKey.CreatedAt,
+		}
+	}
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get API key"})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Login successful",
-		"token":   token,
-		"api_key": apiKey,
+		"message":  "Login successful",
+		"token":    token,
+		"api_keys": apiKeyInfos,
 	})
 }
 
