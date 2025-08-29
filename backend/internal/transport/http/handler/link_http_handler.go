@@ -51,7 +51,7 @@ func getRequestBaseURL(ctx *gin.Context) string {
 	return fmt.Sprintf("%s://%s", scheme, host)
 }
 
-// Helper for error response
+// Helper for error response (deprecated - use httptypes.RespondError instead)
 func respondError(ctx *gin.Context, status int, err error) {
 	ctx.JSON(status, gin.H{"error": err.Error()})
 }
@@ -83,7 +83,9 @@ func (h *LinkHttpHandler) CreateShortLink(ctx *gin.Context, apiKeyID int64) {
 	}
 
 	if err := ctx.ShouldBindJSON(&r); err != nil {
-		respondError(ctx, http.StatusBadRequest, err)
+		httptypes.RespondValidationError(ctx, "Invalid request data", []httptypes.ValidationError{
+			{Field: "long_url", Message: "URL is required and must be valid"},
+		})
 		return
 	}
 
@@ -91,13 +93,13 @@ func (h *LinkHttpHandler) CreateShortLink(ctx *gin.Context, apiKeyID int64) {
 	link, err := h.service.CreateShortLink(ctx.Request.Context(), apiKeyID, r.LongURL, r.ShortCode, r.Password)
 	if err != nil {
 		if errors.Is(err, usecase.ErrShortCodeAlreadyExists) {
-			respondError(ctx, http.StatusConflict, err)
+			httptypes.RespondConflict(ctx, "The custom short code is already taken. Please choose a different one.")
 		} else if errors.Is(err, usecase.ErrLinkLimitExceeded) {
-			respondError(ctx, http.StatusForbidden, err)
+			httptypes.RespondForbidden(ctx, "You have reached the maximum number of links allowed for your plan. Please upgrade or delete some existing links.")
 		} else if errors.Is(err, usecase.ErrUnauthorized) {
-			respondError(ctx, http.StatusUnauthorized, err)
+			httptypes.RespondUnauthorized(ctx, "Invalid authentication credentials.")
 		} else {
-			respondError(ctx, http.StatusInternalServerError, err)
+			httptypes.RespondInternalError(ctx, "Failed to create short link. Please try again later.")
 		}
 		return
 	}
@@ -116,16 +118,16 @@ func (h *LinkHttpHandler) ResolveShortCode(ctx *gin.Context) {
 	shortCode := ctx.Param("shortCode")
 
 	if shortCode == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "short code is required"})
+		httptypes.RespondBadRequest(ctx, "Short code is required")
 		return
 	}
 
 	link, err := h.service.ResolveLink(ctx.Request.Context(), shortCode)
 	if err != nil {
 		if errors.Is(err, usecase.ErrLinkNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			httptypes.RespondNotFound(ctx, "Short link")
 		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resolve link"})
+			httptypes.RespondInternalError(ctx, "Failed to resolve link. Please try again later.")
 		}
 		return
 	}
@@ -138,7 +140,7 @@ func (h *LinkHttpHandler) GetLinksByUser(ctx *gin.Context) {
 
 	links, apiKeysMap, err := h.service.GetLinksByUser(ctx.Request.Context(), userID)
 	if err != nil {
-		respondError(ctx, http.StatusInternalServerError, err)
+		httptypes.RespondInternalError(ctx, "Failed to retrieve your links. Please try again later.")
 		return
 	}
 
@@ -158,20 +160,32 @@ func (h *LinkHttpHandler) GetLinksByUser(ctx *gin.Context) {
 }
 
 func (h *LinkHttpHandler) SoftDeleteLink(ctx *gin.Context) {
-	apiKey := ctx.MustGet("apiKey").(string)
+	// Try to get API key from middleware first (for API key auth)
+	var apiKey string
+	if apiKeyFromMiddleware, exists := ctx.Get("apiKey"); exists {
+		apiKey = apiKeyFromMiddleware.(string)
+	} else {
+		// If not from middleware, try to get from header (for JWT auth with API key)
+		apiKey = ctx.GetHeader("X-API-KEY")
+		if apiKey == "" {
+			httptypes.RespondBadRequest(ctx, "API key is required for link deletion")
+			return
+		}
+	}
+
 	shortCode := ctx.Param("shortCode")
 	if shortCode == "" {
-		respondError(ctx, http.StatusBadRequest, errors.New("short code is required"))
+		httptypes.RespondBadRequest(ctx, "Short code is required")
 		return
 	}
 	err := h.service.DeleteLink(ctx.Request.Context(), apiKey, shortCode)
 	if err != nil {
 		if errors.Is(err, usecase.ErrUnauthorized) {
-			respondError(ctx, http.StatusUnauthorized, err)
+			httptypes.RespondUnauthorized(ctx, "You don't have permission to delete this link.")
 		} else if errors.Is(err, usecase.ErrLinkNotFound) {
-			respondError(ctx, http.StatusNotFound, err)
+			httptypes.RespondNotFound(ctx, "Short link")
 		} else {
-			respondError(ctx, http.StatusInternalServerError, err)
+			httptypes.RespondInternalError(ctx, "Failed to delete link. Please try again later.")
 		}
 		return
 	}

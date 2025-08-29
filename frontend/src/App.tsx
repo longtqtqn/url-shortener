@@ -5,7 +5,10 @@ import CenteredModal from './components/CenteredModal';
 import CreateLink from './components/CreateLink';
 import LinkList from './components/LinkList';
 import Dashboard from './components/Dashboard';
+import SimpleToast from './components/SimpleToast';
+import { ToastProvider } from './contexts/ToastContext';
 import { apiService } from './services/api';
+import { useSimpleToast } from './hooks/useSimpleToast';
 
 type AuthState = 'public' | 'authenticated';
 
@@ -14,10 +17,38 @@ function App() {
   const [activeTab, setActiveTab] = useState<'create' | 'list' | 'api-keys'>('create');
   const [userEmail, setUserEmail] = useState<string>('');
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const { toasts, showError, showSuccess, showInfo, removeToast } = useSimpleToast();
 
   useEffect(() => {
     checkAuthentication();
   }, []);
+
+  // Update document title based on current tab and auth state
+  useEffect(() => {
+    const updateTitle = () => {
+      if (showAuthModal) {
+        document.title = 'Login / Register - URL Shortener';
+      } else if (authState === 'public') {
+        document.title = 'URL Shortener';
+      } else {
+        switch (activeTab) {
+          case 'create':
+            document.title = 'Create Link - URL Shortener';
+            break;
+          case 'list':
+            document.title = 'My Links - URL Shortener';
+            break;
+          case 'api-keys':
+            document.title = 'API Keys - URL Shortener';
+            break;
+          default:
+            document.title = 'URL Shortener';
+        }
+      }
+    };
+
+    updateTitle();
+  }, [activeTab, authState, showAuthModal]);
 
   const checkAuthentication = async () => {
     // Check if user has JWT token
@@ -28,9 +59,8 @@ function App() {
         setAuthState('authenticated');
         return;
       } catch (error) {
-        // Token is invalid, remove it
-        console.log('Token validation failed, removing token');
         apiService.removeToken();
+        showError('Session expired. Please log in again.');
       }
     }
 
@@ -42,9 +72,8 @@ function App() {
         setAuthState('authenticated');
         return;
       } catch (error) {
-        // API key is invalid, remove it
-        console.log('API key validation failed, removing API key');
         apiService.removeApiKey();
+        showError('API key is invalid. Please log in again.');
       }
     }
 
@@ -80,11 +109,12 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header with login/logout functionality */}
-      {authState === 'authenticated' ? (
-        <Header onLogout={handleLogout} userEmail={userEmail} />
-      ) : (
+    <ToastProvider showError={showError} showSuccess={showSuccess} showInfo={showInfo}>
+      <div className="min-h-screen bg-gray-50">
+        {/* Header with login/logout functionality */}
+        {authState === 'authenticated' ? (
+          <Header onLogout={handleLogout} userEmail={userEmail} />
+        ) : (
         <header className="bg-white shadow-sm border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
@@ -107,10 +137,10 @@ function App() {
         </header>
       )}
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         {authState === 'authenticated' ? (
           // Authenticated user interface
-          <div className="space-y-8">
+          <div className="space-y-4">
             <Dashboard activeTab={activeTab} setActiveTab={setActiveTab} />
             
             {activeTab === 'create' && (
@@ -159,7 +189,18 @@ function App() {
       >
         <Auth onAuthSuccess={handleAuthSuccess} />
       </CenteredModal>
-    </div>
+
+      {/* Simple Toast Notifications */}
+      {toasts.map((toast) => (
+        <SimpleToast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          onClose={() => removeToast(toast.id)}
+        />
+      ))}
+      </div>
+    </ToastProvider>
   );
 }
 

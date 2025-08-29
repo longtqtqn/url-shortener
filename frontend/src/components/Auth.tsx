@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { apiService, type RegisterRequest, type LoginRequest } from '../services/api';
+import { apiService, type RegisterRequest, type LoginRequest, getErrorMessage } from '../services/api';
 import type { AuthMode } from '../types';
 
 interface AuthProps {
@@ -65,7 +65,8 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         onAuthSuccess(response.token);
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || `Failed to ${mode}`);
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -86,8 +87,8 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       </h2>
 
       <form onSubmit={handleSubmit} className="flex flex-col items-center space-y-4">
-        <div className="w-[70%] grid grid-cols-11">
-          <label htmlFor="email" className="col-span-5 text-xs font-medium text-gray-700">
+        <div className="w-[80%] grid grid-cols-11">
+          <label htmlFor="email" className="col-span-5 text-xm font-medium text-gray-700">
             Email Address
           </label>
           <input
@@ -101,8 +102,8 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           />
         </div>
 
-        <div className="w-[70%] grid grid-cols-11">
-          <label htmlFor="password" className="col-span-5 text-xs font-medium text-gray-700">
+        <div className="w-[80%] grid grid-cols-11">
+          <label htmlFor="password" className="col-span-5 text-xm font-medium text-gray-700">
             Password
           </label>
           <input
@@ -118,7 +119,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         </div>
 
         {mode === 'register' && (
-          <div className="w-[70%] grid grid-cols-11">
+          <div className="w-[80%] grid grid-cols-11">
             <label htmlFor="confirmPassword" className="col-span-5 text-xs font-medium text-gray-700 mb-1">
               Confirm Password
             </label>
@@ -156,7 +157,7 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-[20%] bg-blue-600 text-white py-2 px-4 rounded-md font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center space-x-2 text-sm"
+          className="w-[30%] bg-blue-600 text-white py-2 px-4 rounded-md font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center space-x-2 text-sm"
         >
           {isLoading && (
             <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">

@@ -13,6 +13,7 @@ type LinkRepository interface {
 	GetLinkNoAPIKey(ctx context.Context, shortCode string) ([]*Link, error)
 
 	SoftDeleteByShortCode(ctx context.Context, apiKeyID int64, shortCode string) error
+	SoftDeleteByAPIKeyID(ctx context.Context, apiKeyID int64) error
 	TrackClick(ctx context.Context, shortCode string) error
 }
 
@@ -28,4 +29,5 @@ type UserRepository interface {
 	GetAPIKeyIDByAPIKey(ctx context.Context, apiKey string) (int64, error)
 
 	SoftDeleteByID(ctx context.Context, userID int64) error
+	SoftDeleteAPIKeyByKey(ctx context.Context, userID int64, apiKey string) error
 }

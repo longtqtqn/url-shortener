@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { apiService } from '../services/api';
+import { apiService, getErrorMessage } from '../services/api';
+import ErrorDisplay from './ErrorDisplay';
 
 interface CreateApiKeyProps {
   onApiKeyValidated: () => void;
@@ -29,7 +30,7 @@ const CreateApiKey: React.FC<CreateApiKeyProps> = ({ onApiKeyValidated }) => {
     } catch (err: any) {
       // Remove invalid API key
       apiService.removeApiKey();
-      setError('Invalid API key. Please check and try again.');
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -70,9 +71,10 @@ const CreateApiKey: React.FC<CreateApiKeyProps> = ({ onApiKeyValidated }) => {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-            {error}
-          </div>
+          <ErrorDisplay 
+            error={error} 
+            onDismiss={() => setError('')}
+          />
         )}
 
         {success && (

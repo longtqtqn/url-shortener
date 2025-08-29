@@ -125,6 +125,18 @@ func (u *UserPGRepository) GetAPIKeyIDByAPIKey(ctx context.Context, apiKey strin
 	return apiKeyID, nil
 }
 
+// SoftDeleteAPIKeyByKey implements domain.UserRepository.
+func (u *UserPGRepository) SoftDeleteAPIKeyByKey(ctx context.Context, userID int64, apiKey string) error {
+	_, err := u.db.NewUpdate().
+		Model((*model.ApiKeyBunModel)(nil)).
+		Set("deleted_at = NOW()").
+		Where("key = ?", apiKey).
+		Where("user_id = ?", userID).
+		Where("deleted_at IS NULL").
+		Exec(ctx)
+	return err
+}
+
 func NewUserPGRepository(db *bun.DB) domain.UserRepository {
 	return &UserPGRepository{db: db}
 }

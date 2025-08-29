@@ -32,6 +32,7 @@ func (h *UserHttpHandler) GetRoutes() []httptypes.Route {
 
 		// JWT authenticated routes
 		{Method: "POST", Path: "/api/create-api-key", Handler: h.CreateAPIKey, RequireAuth: true, AuthType: "jwt"},
+		{Method: "DELETE", Path: "/api/api-key", Handler: h.DeleteAPIKey, RequireAuth: true, AuthType: "jwt"},
 	}
 }
 
@@ -40,7 +41,7 @@ func (h *UserHttpHandler) CreateAPIKey(ctx *gin.Context) {
 
 	apiKey, err := h.shortenerService.CreateAPIKey(ctx.Request.Context(), userID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create API key"})
+		httptypes.RespondInternalError(ctx, "Failed to create API key. Please try again later.")
 		return
 	}
 
@@ -57,13 +58,16 @@ func (h *UserHttpHandler) Login(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httptypes.RespondValidationError(ctx, "Invalid login data", []httptypes.ValidationError{
+			{Field: "email", Message: "Valid email address is required"},
+			{Field: "password", Message: "Password is required"},
+		})
 		return
 	}
 
 	token, userID, err := h.adminService.Login(ctx.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		httptypes.RespondUnauthorized(ctx, "Invalid email or password. Please check your credentials and try again.")
 		return
 	}
 
@@ -76,7 +80,7 @@ func (h *UserHttpHandler) Login(ctx *gin.Context) {
 		}
 	}
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get API key"})
+		httptypes.RespondInternalError(ctx, "Login successful, but failed to retrieve API keys. Please try refreshing the page.")
 		return
 	}
 
@@ -94,19 +98,26 @@ func (h *UserHttpHandler) Register(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		httptypes.RespondValidationError(ctx, "Invalid registration data", []httptypes.ValidationError{
+			{Field: "email", Message: "Valid email address is required"},
+			{Field: "password", Message: "Password must be at least 6 characters long"},
+		})
 		return
 	}
 
 	token, userID, err := h.adminService.Register(ctx.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		if err.Error() == "user already exists" {
+			httptypes.RespondConflict(ctx, "An account with this email address already exists. Please use a different email or try logging in.")
+		} else {
+			httptypes.RespondInternalError(ctx, "Failed to create account. Please try again later.")
+		}
 		return
 	}
 
 	apiKey, err := h.shortenerService.CreateAPIKey(ctx.Request.Context(), userID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get API key"})
+		httptypes.RespondInternalError(ctx, "Account created successfully, but failed to generate API key. Please try creating one manually from your dashboard.")
 		return
 	}
 
@@ -114,5 +125,34 @@ func (h *UserHttpHandler) Register(ctx *gin.Context) {
 		"message": "User registered successfully",
 		"token":   token,
 		"api_key": apiKey,
+	})
+}
+
+func (h *UserHttpHandler) DeleteAPIKey(ctx *gin.Context) {
+	userID := ctx.MustGet("userID").(int64)
+
+	var req struct {
+		APIKey string `json:"api_key" binding:"required"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		httptypes.RespondValidationError(ctx, "Invalid request data", []httptypes.ValidationError{
+			{Field: "api_key", Message: "API key is required"},
+		})
+		return
+	}
+
+	err := h.shortenerService.DeleteAPIKeyAndLinks(ctx.Request.Context(), userID, req.APIKey)
+	if err != nil {
+		if err.Error() == "unauthorized access" {
+			httptypes.RespondUnauthorized(ctx, "The specified API key was not found or does not belong to your account.")
+		} else {
+			httptypes.RespondInternalError(ctx, "Failed to delete API key. Please try again later.")
+		}
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "API key and associated links deleted successfully",
 	})
 }

@@ -88,6 +88,17 @@ func (r *LinkPGRepository) SoftDeleteByShortCode(ctx context.Context, apiKeyID i
 	return err
 }
 
+// SoftDeleteByAPIKeyID implements domain.LinkRepository.
+func (r *LinkPGRepository) SoftDeleteByAPIKeyID(ctx context.Context, apiKeyID int64) error {
+	_, err := r.db.NewUpdate().
+		Model((*model.LinkBunModel)(nil)).
+		Set("deleted_at = NOW()").
+		Where("apikey_id = ?", apiKeyID).
+		Where("deleted_at IS NULL").
+		Exec(ctx)
+	return err
+}
+
 func (r *LinkPGRepository) TrackClick(ctx context.Context, shortCode string) error {
 	_, err := r.db.NewUpdate().
 		Model((*model.LinkBunModel)(nil)).

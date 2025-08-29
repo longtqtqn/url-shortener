@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { apiService, type CreateLinkRequest } from '../services/api';
+import { apiService, type CreateLinkRequest, getErrorMessage } from '../services/api';
+import { DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { useToast } from '../contexts/ToastContext';
 
 interface CreateLinkProps {
   onLinkCreated: () => void;
@@ -10,11 +12,12 @@ const CreateLink: React.FC<CreateLinkProps> = ({ onLinkCreated, isAuthenticated 
   const [longUrl, setLongUrl] = useState('');
   const [customShortCode, setCustomShortCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+
   const [success, setSuccess] = useState('');
   const [createdLink, setCreatedLink] = useState('');
   const [apiKeys, setApiKeys] = useState<Array<{key: string, createdAt: string}>>([]);
   const [selectedApiKey, setSelectedApiKey] = useState<string>('');
+  const { showError, showSuccess } = useToast();
 
   // Load API keys when component mounts or authentication changes
   useEffect(() => {
@@ -45,7 +48,6 @@ const CreateLink: React.FC<CreateLinkProps> = ({ onLinkCreated, isAuthenticated 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError('');
     setSuccess('');
     setCreatedLink('');
 
@@ -59,13 +61,14 @@ const CreateLink: React.FC<CreateLinkProps> = ({ onLinkCreated, isAuthenticated 
         ? await apiService.createLink(data)
         : await apiService.createLinkPublic(data);
       
-      setSuccess('Short URL created successfully!');
       setCreatedLink(response.shortened_url);
       setLongUrl('');
       setCustomShortCode('');
+      showSuccess('Short URL created successfully!');
       onLinkCreated();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create short URL');
+      const errorMessage = getErrorMessage(err);
+      showError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -76,14 +79,14 @@ const CreateLink: React.FC<CreateLinkProps> = ({ onLinkCreated, isAuthenticated 
       await navigator.clipboard.writeText(createdLink);
       setSuccess('Link copied to clipboard!');
     } catch (err) {
-      setError('Failed to copy to clipboard');
+      showError('Failed to copy to clipboard');
     }
   };
 
   return (
     <div className="flex justify-center min-h-[calc(100vh-200px)]">
       <div className="w-[60%] bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">
           Create Short URL
         </h2>
         
@@ -164,11 +167,7 @@ const CreateLink: React.FC<CreateLinkProps> = ({ onLinkCreated, isAuthenticated 
           </div>
         )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-            {error}
-          </div>
-        )}
+
 
         {success && (
           <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-md">
@@ -183,8 +182,9 @@ const CreateLink: React.FC<CreateLinkProps> = ({ onLinkCreated, isAuthenticated 
               <button
                 type="button"
                 onClick={copyToClipboard}
-                className="text-blue-600 hover:text-blue-800 underline"
+                className="inline-flex items-center px-3 py-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 text-sm rounded border border-blue-200 hover:border-blue-300 transition-colors"
               >
+                <DocumentDuplicateIcon className="h-4 w-4 mr-1" />
                 Copy
               </button>
             </div>

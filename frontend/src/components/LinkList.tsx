@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { apiService, type Link } from '../services/api';
-import { TrashIcon, LinkIcon, CalendarIcon, EyeIcon } from '@heroicons/react/24/outline';
+import { apiService, type Link, getErrorMessage } from '../services/api';
+import { TrashIcon, LinkIcon, CalendarIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { useToast } from '../contexts/ToastContext';
 
 const LinkList: React.FC = () => {
   const [links, setLinks] = useState<Link[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const { showError, showSuccess } = useToast();
 
   const fetchLinks = async () => {
     try {
@@ -14,23 +16,28 @@ const LinkList: React.FC = () => {
       const userLinks = await apiService.getUserLinks();
       setLinks(userLinks);
       setError('');
+
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to fetch links');
+      const errorMessage = getErrorMessage(err);
+      setError('Failed to load links');
+      showError(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDelete = async (shortCode: string) => {
+  const handleDelete = async (shortCode: string, apiKey?: string) => {
     if (!confirm('Are you sure you want to delete this link?')) {
       return;
     }
 
     try {
-      await apiService.deleteLink(shortCode);
+      await apiService.deleteLink(shortCode, apiKey);
       setLinks(links.filter(link => !link.shortURL.includes(shortCode)));
+      showSuccess('Link deleted successfully');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to delete link');
+      const errorMessage = getErrorMessage(err);
+      showError(errorMessage);
     }
   };
 
@@ -68,11 +75,11 @@ const LinkList: React.FC = () => {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-        {error}
+      <div className="text-center py-8">
+        <div className="text-gray-500 mb-4">Failed to load links</div>
         <button
           onClick={fetchLinks}
-          className="ml-4 text-red-600 hover:text-red-800 underline"
+          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
         >
           Retry
         </button>
@@ -103,14 +110,14 @@ const LinkList: React.FC = () => {
       
       {/* Table Header */}
       <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-        <div className="grid grid-cols-14 gap-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <div className="grid grid-cols-16 gap-3 text-xs font-medium text-gray-500 uppercase tracking-wide">
           <div className="col-span-2">API Key</div>
           <div className="col-span-3">Short URL</div>
           <div className="col-span-3">Original URL</div>
           <div className="col-span-1">Clicks</div>
           <div className="col-span-2">Created At</div>
           <div className="col-span-2">Last Clicked</div>
-          <div className="col-span-1 text-center">Actions</div>
+          <div className="col-span-3">Actions</div>
         </div>
       </div>
       
@@ -118,7 +125,7 @@ const LinkList: React.FC = () => {
       <div className="divide-y divide-gray-200">
         {links.map((link, index) => (
           <div key={index} className="px-6 py-4 hover:bg-gray-50">
-            <div className="grid grid-cols-14 gap-3 items-center">
+            <div className="grid grid-cols-16 gap-3 items-center">
               {/* API Key */}
               <div className="col-span-2">
                 <span className="text-xs font-mono bg-gray-100 px-2 py-1 rounded">
@@ -183,34 +190,46 @@ const LinkList: React.FC = () => {
               </div>
               
               {/* Actions */}
-              <div className="col-span-1">
-                <div className="grid grid-cols-2">
+              <div className="col-span-3">
+                <div className="flex items-center space-x-2">
                   <button
                     onClick={() => copyToClipboard(link.shortURL)}
-                    className={`p-1 rounded transition-colors ${
+                    className={`inline-flex items-center px-2 py-1 text-xs rounded border transition-colors ${
                       copiedUrl === link.shortURL 
-                        ? 'text-green-600 bg-green-50' 
-                        : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50'
+                        ? 'text-green-600 bg-green-50 border-green-200' 
+                        : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50 border-blue-200 hover:border-blue-300'
                     }`}
                     title={copiedUrl === link.shortURL ? "Copied!" : "Copy short URL"}
                   >
                     {copiedUrl === link.shortURL ? (
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
+                      <>
+                        <svg className="h-3 w-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Copied
+                      </>
                     ) : (
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
+                      <>
+                        <DocumentDuplicateIcon className="h-3 w-3 mr-1" />
+                        Copy
+                      </>
                     )}
                   </button>
-                  <button
-                    onClick={() => handleDelete(link.shortURL.split('/').pop()!)}
-                    className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50"
-                    title="Delete link"
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </button>
+                  {link.apiKey ? (
+                    <button
+                      onClick={() => handleDelete(link.shortURL.split('/').pop()!, link.apiKey)}
+                      className="inline-flex items-center px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded border border-red-200 hover:border-red-300 transition-colors"
+                      title="Delete link"
+                    >
+                      <TrashIcon className="h-3 w-3 mr-1" />
+                      Delete
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-1 text-xs text-gray-400 cursor-not-allowed" title="Cannot delete public links">
+                      <TrashIcon className="h-3 w-3 mr-1" />
+                      Delete
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

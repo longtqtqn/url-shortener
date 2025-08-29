@@ -243,3 +243,45 @@ func (s *ShortenerService) GetLinksByUser(ctx context.Context, userID int64) ([]
 	}
 	return links, apiKeysMap, nil
 }
+
+// DeleteAPIKeyAndLinks deletes an API key and all associated links for a user
+func (s *ShortenerService) DeleteAPIKeyAndLinks(ctx context.Context, userID int64, apiKey string) error {
+	// First, get the API key ID to verify it belongs to the user
+	apiKeyID, err := s.userRepo.GetAPIKeyIDByAPIKey(ctx, apiKey)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrUnauthorized
+		}
+		return err
+	}
+
+	// Verify the API key belongs to the user by checking if it exists in their API keys
+	userAPIKeys, err := s.userRepo.GetAPIKeysByUserID(ctx, userID, 0, 0)
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for _, userAPIKey := range userAPIKeys {
+		if userAPIKey.ID == apiKeyID {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return ErrUnauthorized
+	}
+
+	// Delete all links associated with this API key
+	if err := s.linkRepo.SoftDeleteByAPIKeyID(ctx, apiKeyID); err != nil {
+		return err
+	}
+
+	// Delete the API key
+	if err := s.userRepo.SoftDeleteAPIKeyByKey(ctx, userID, apiKey); err != nil {
+		return err
+	}
+
+	return nil
+}
